@@ -611,8 +611,11 @@
 
 
 <script type="text/html" id="logs-icon">
-  <!-- ko if: $parent.logsURL() != '' && $parent.logsURL() != null -->
+  <!-- ko if: $parent.widgetType() != 'subworkflow-widget' && $parent.logsURL() != '' && $parent.logsURL() != null -->
     <a class="pull-right pointer logs-icon" data-bind="click: function(){ location.href = $parent.logsURL(); }" title="${ _('View logs') }"><i class="fa fa-tasks"></i></a>
+  <!-- /ko -->
+  <!-- ko if: $parent.widgetType() == 'subworkflow-widget' -->
+    <a class="pull-right pointer logs-icon" data-bind="attr: { href: $parent.externalIdUrl() }" title="${ _('View the workflow') }"><img src="${static('oozie/art/icon_oozie_workflow_48.png')}" class="app-icon"/></a>
   <!-- /ko -->
 </script>
 
@@ -1576,6 +1579,28 @@
         </div>
 
         <div class="airy">
+          <span class="widget-label" data-bind="text: $root.workflow_properties.cc.label"></span>
+          <input type="text" class="seventy" data-bind="value: properties.cc, attr: { placeholder: $root.workflow_properties.cc.help_text }"/>
+        </div>
+
+        <div class="airy">
+          <span class="widget-label" data-bind="text: $root.workflow_properties.bcc.label"></span>
+          <input type="text" class="seventy" data-bind="value: properties.bcc, attr: { placeholder: $root.workflow_properties.bcc.help_text }"/>
+        </div>
+
+        <div data-bind="visible: $root.isEditing">
+          <div data-bind="visible: ! $parent.ooziePropertiesExpanded()" class="nowrap">
+            <span class="widget-label" data-bind="text: $root.workflow_properties.attachment.label"></span>
+            <input type="text" class="filechooser-input seventy" data-bind="filechooser: properties.attachment, filechooserOptions: globalFilechooserOptions, hdfsAutocomplete: properties.attachment, value: properties.attachment, attr: { placeholder: $root.workflow_properties.bcc.help_text }"/>
+          </div>
+        </div>
+
+        <div class="airy">
+          <span class="widget-label" data-bind="text: $root.workflow_properties.content_type.label"></span>
+          <input type="text" class="seventy" data-bind="value: properties.content_type, attr: { placeholder: $root.workflow_properties.content_type.help_text }" validate="nonempty"/>
+        </div>
+
+        <div class="airy">
           <span class="widget-label" data-bind="text: $root.workflow_properties.subject.label"></span>
           <input type="text" class="seventy" data-bind="value: properties.subject, attr: { placeholder: $root.workflow_properties.subject.help_text }" />
         </div>
@@ -1584,6 +1609,7 @@
           <span class="widget-label" data-bind="text: $root.workflow_properties.body.label"></span>
           <textarea class="seventy" style="resize:both" data-bind="value: properties.body, attr: { placeholder: $root.workflow_properties.body.help_text }"></textarea>
         </div>
+
       </div>
     </div>
 

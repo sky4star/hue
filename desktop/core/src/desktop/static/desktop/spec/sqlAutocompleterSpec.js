@@ -26,7 +26,10 @@ define([
       responseForUrls: {}
     };
 
-    var assistHelper = new AssistHelper({}, "testUser");
+    var assistHelper = AssistHelper.getInstance({
+      i18n: {},
+      user: 'testUser'
+    });
 
     var snippet = {
       type: ko.observable(),
@@ -233,6 +236,32 @@ define([
           beforeCursor: "SELECT * FROM ",
           afterCursor: "",
           expectedSuggestions: ["testTable1", "testTable2", "database_one.", "database_two."]
+        });
+      });
+
+      it("should suggest table names after FROM with started name", function() {
+        assertAutoComplete({
+          serverResponses: {
+            "/notebook/api/autocomplete/database_one" : {
+              tables_meta: [{ name: "testTable1" }, { name: "testTable2" }]
+            }
+          },
+          beforeCursor: "SELECT * FROM tes",
+          afterCursor: "",
+          expectedSuggestions: ["testTable1", "testTable2"]
+        });
+      });
+
+      it("should suggest database names after FROM with started name", function() {
+        assertAutoComplete({
+          serverResponses: {
+            "/notebook/api/autocomplete/database_one" : {
+              tables_meta: [{ name: "testTable1" }, { name: "testTable2" }]
+            }
+          },
+          beforeCursor: "SELECT * FROM dat",
+          afterCursor: "",
+          expectedSuggestions: ["database_one.", "database_two."]
         });
       });
 

@@ -64,17 +64,230 @@ from desktop.views import _ko
 
         ko.components.register('jvm-memory-input', {
           viewModel: JvmMemoryInputViewModel,
-          template: {element: 'jvm-memory-input-template'}
+          template: { element: 'jvm-memory-input-template' }
         });
       }());
     }));
   </script>
 </%def>
 
+<%def name="keyValueListInput()">
+  <script type="text/html" id="key-value-list-input-template">
+    <ul data-bind="sortable: { data: values, options: { axis: 'y', containment: 'parent' }}, visible: values().length" class="unstyled">
+      <li>
+        <div class="input-append" style="margin-bottom: 4px">
+          <input type="text" style="width: 130px" placeholder="${ _('Key') }" data-bind="textInput: key, valueUpdate: 'afterkeydown'"/>
+          <input type="text" style="width: 130px" placeholder="${ _('Value') }" data-bind="textInput: value, valueUpdate: 'afterkeydown'"/>
+          <span class="add-on move-widget muted"><i class="fa fa-arrows"></i></span>
+          <a class="add-on muted" href="javascript: void(0);" data-bind="click: function(){ $parent.removeValue($data); }"><i class="fa fa-minus"></i></a>
+        </div>
+      </li>
+    </ul>
+    <div style="min-width: 280px; margin-top: 5px;">
+      <a class="inactive-action pointer" style="padding: 3px 10px 3px 3px;;" data-bind="click: addValue">
+        <i class="fa fa-plus"></i>
+      </a>
+    </div>
+  </script>
+
+  <script type="text/javascript" charset="utf-8">
+    (function (factory) {
+      if(typeof require === "function") {
+        require(['knockout'], factory);
+      } else {
+        factory(ko);
+      }
+    }(function (ko) {
+      (function () {
+
+        function KeyValueListInputViewModel(params) {
+          var self = this;
+          self.values = params.values;
+          params.visibleObservable.subscribe(function (newValue) {
+            if (!newValue) {
+              self.values($.grep(self.values(), function (value) {
+                return value.key() && value.value();
+              }))
+            }
+          });
+        }
+
+        KeyValueListInputViewModel.prototype.addValue = function () {
+          var self = this;
+          var newValue = {
+            key: ko.observable(''),
+            value: ko.observable('')
+          };
+          self.values.push(newValue);
+        };
+
+        KeyValueListInputViewModel.prototype.removeValue = function (valueToRemove) {
+          var self = this;
+          self.values.remove(valueToRemove);
+        };
+
+        ko.components.register('key-value-list-input', {
+          viewModel: KeyValueListInputViewModel,
+          template: { element: 'key-value-list-input-template' }
+        });
+      }());
+    }));
+  </script>
+</%def>
+
+<%def name="functionListInput()">
+  <script type="text/html" id="function-list-input-template">
+    <ul data-bind="sortable: { data: values, options: { axis: 'y', containment: 'parent' }}, visible: values().length" class="unstyled">
+      <li>
+        <div class="input-append" style="margin-bottom: 4px">
+          <input type="text" style="width: 110px" placeholder="${ _('Name, e.g. foo') }" data-bind="textInput: name, valueUpdate: 'afterkeydown'"/>
+          <input type="text" style="width: 150px" placeholder="${ _('Class, e.g. org.hue.Bar') }" data-bind="textInput: class_name, valueUpdate: 'afterkeydown'"/>
+          <span class="add-on move-widget muted"><i class="fa fa-arrows"></i></span>
+          <a class="add-on muted" href="javascript: void(0);" data-bind="click: function(){ $parent.removeValue($data); }"><i class="fa fa-minus"></i></a>
+        </div>
+      </li>
+    </ul>
+    <div style="min-width: 280px; margin-top: 5px;">
+      <a class="inactive-action pointer" style="padding: 3px 10px 3px 3px;;" data-bind="click: addValue">
+        <i class="fa fa-plus"></i>
+      </a>
+    </div>
+  </script>
+
+  <script type="text/javascript" charset="utf-8">
+    (function (factory) {
+      if(typeof require === "function") {
+        require(['knockout'], factory);
+      } else {
+        factory(ko);
+      }
+    }(function (ko) {
+      (function () {
+
+        function FunctionListInputViewModel(params) {
+          var self = this;
+          self.values = params.values;
+          params.visibleObservable.subscribe(function (newValue) {
+            if (!newValue) {
+              self.values($.grep(self.values(), function (value) {
+                return value.name() && value.class_name();
+              }))
+            }
+          });
+        }
+
+        FunctionListInputViewModel.prototype.addValue = function () {
+          var self = this;
+          var newValue = {
+            name: ko.observable(''),
+            class_name: ko.observable('')
+          };
+          self.values.push(newValue);
+        };
+
+        FunctionListInputViewModel.prototype.removeValue = function (valueToRemove) {
+          var self = this;
+          self.values.remove(valueToRemove);
+        };
+
+        ko.components.register('function-list-input', {
+          viewModel: FunctionListInputViewModel,
+          template: { element: 'function-list-input-template' }
+        });
+      }());
+    }));
+  </script>
+</%def>
+
+<%def name="hdfsFileListInput()">
+  <script type="text/html" id="hdfs-file-list-input-template">
+    <ul data-bind="sortable: { data: values, options: { axis: 'y', containment: 'parent' }}, visible: values().length" class="unstyled">
+      <li>
+        <div class="input-append" style="margin-bottom: 4px">
+          <input type="text" class="filechooser-input" data-bind="value: path, valueUpdate:'afterkeydown', filechooser: { value: path, isAddon: true }" placeholder="${ _('Path to the file, e.g. hdfs://localhost:8020/user/hue/file.hue') }"/>
+          <span class="add-on move-widget muted"><i class="fa fa-arrows"></i></span>
+          <a class="add-on muted" href="javascript: void(0);" data-bind="click: function(){ $parent.removeValue($data); }"><i class="fa fa-minus"></i></a>
+        </div>
+      </li>
+    </ul>
+    <div style="min-width: 280px; margin-top: 5px;">
+      <a class="inactive-action pointer" style="padding: 3px 10px 3px 3px;;" data-bind="click: addValue">
+        <i class="fa fa-plus"></i>
+      </a>
+    </div>
+  </script>
+
+  <script type="text/javascript" charset="utf-8">
+    (function (factory) {
+      if(typeof require === "function") {
+        require(['knockout'], factory);
+      } else {
+        factory(ko);
+      }
+    }(function (ko) {
+      (function () {
+
+        var identifyType = function (path) {
+          switch (path.substr(path.lastIndexOf('.') + 1).toLowerCase()) {
+            case 'jar':
+              return 'jar'
+            case 'zip':
+            case 'tar':
+            case 'rar':
+            case 'bz2':
+            case 'gz':
+            case 'tgz':
+              return 'archive';
+          }
+          return 'file';
+        }
+
+        function HdfsFileListInputViewModel(params) {
+          var self = this;
+          self.values = params.values;
+          $.each(self.values(), function (idx, value) {
+            value.path.subscribe(function (newPath) {
+              value.type(identifyType(newPath));
+            });
+          })
+          params.visibleObservable.subscribe(function (newValue) {
+            if (!newValue) {
+              self.values($.grep(self.values(), function (value) {
+                return value.path();
+              }))
+            }
+          });
+        }
+
+        HdfsFileListInputViewModel.prototype.addValue = function () {
+          var self = this;
+          var newValue = {
+            path: ko.observable(''),
+            type: ko.observable('')
+          };
+          newValue.path.subscribe(function (newPath) {
+            newValue.type(identifyType(newPath));
+          })
+          self.values.push(newValue);
+        };
+
+        HdfsFileListInputViewModel.prototype.removeValue = function (valueToRemove) {
+          var self = this;
+          self.values.remove(valueToRemove);
+        };
+
+        ko.components.register('hdfs-file-list-input', {
+          viewModel: HdfsFileListInputViewModel,
+          template: { element: 'hdfs-file-list-input-template' }
+        });
+      }());
+    }));
+  </script>
+</%def>
 
 <%def name="csvListInput()">
   <script type="text/html" id="csv-list-input-template">
-    <ul data-bind="sortable: values, visible: values().length" class="unstyled">
+    <ul data-bind="sortable: { data: values, options: { axis: 'y', containment: 'parent' }}, visible: values().length" class="unstyled">
       <li style="margin-bottom: 4px">
         <div class="input-append">
           <!-- ko ifnot: $parent.inputTemplate -->
@@ -82,10 +295,8 @@ from desktop.views import _ko
           <!-- /ko -->
           <!-- ko template: { if: $parent.inputTemplate, name: $parent.inputTemplate } --><!-- /ko -->
           <span class="add-on move-widget muted"><i class="fa fa-arrows"></i></span>
+          <a class="add-on muted" href="javascript: void(0);" data-bind="click: function(){ $parent.removeValue($data); }"><i class="fa fa-minus"></i></a>
         </div>
-        <a href="#" data-bind="click: function(){ $parent.removeValue(this); }">
-          <i class="fa fa-minus"></i>
-        </a>
       </li>
     </ul>
     <div style="min-width: 280px; margin-top: 5px;">
@@ -146,7 +357,7 @@ from desktop.views import _ko
 
         ko.components.register('csv-list-input', {
           viewModel: CsvListInputViewModel,
-          template: {element: 'csv-list-input-template'}
+          template: { element: 'csv-list-input-template' }
         });
       }());
     }));
@@ -280,7 +491,7 @@ from desktop.views import _ko
 
         ko.components.register('add-snippet-menu', {
           viewModel: AddSnippetMenuViewModel,
-          template: {element: 'add-snippet-menu-template'}
+          template: { element: 'add-snippet-menu-template' }
         });
       }());
     }));
@@ -302,12 +513,12 @@ from desktop.views import _ko
       </a>
       <ul class="dropdown-menu">
         <li>
-          <a class="inactive-action download" href="javascript:void(0)" data-bind="click: downloadCsv" title="${ _('Download first rows as CSV') }">
+          <a class="inactive-action download" href="javascript:void(0)" data-bind="click: downloadCsv, event: { mouseover: function(){ window.onbeforeunload = null; }, mouseout: function() { window.onbeforeunload = $(window).data('beforeunload'); } }" title="${ _('Download first rows as CSV') }">
             <i class="fa fa-file-o"></i> ${ _('CSV') }
           </a>
         </li>
         <li>
-          <a class="inactive-action download" href="javascript:void(0)" data-bind="click: downloadXls" title="${ _('Download first rows as XLS') }">
+          <a class="inactive-action download" href="javascript:void(0)" data-bind="click: downloadXls, event: { mouseover: function(){ window.onbeforeunload = null; }, mouseout: function() { window.onbeforeunload = $(window).data('beforeunload'); } }" title="${ _('Download first rows as XLS') }">
             <i class="fa fa-file-excel-o"></i> ${ _('Excel') }
           </a>
         </li>

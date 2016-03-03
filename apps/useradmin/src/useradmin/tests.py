@@ -20,25 +20,28 @@ import json
 import ldap
 import re
 import sys
+import time
 import urllib
 
-from nose.plugins.attrib import attr
 from nose.plugins.skip import SkipTest
 from nose.tools import assert_true, assert_equal, assert_false, assert_not_equal
 
-import desktop.conf
-from desktop.lib.django_test_util import make_logged_in_client
 from django.contrib.auth.models import User, Group
 from django.utils.encoding import smart_unicode
 from django.core.urlresolvers import reverse
 from django.test.client import Client
 
-from useradmin.models import HuePermission, GroupPermission, UserProfile
-from useradmin.models import get_profile, get_default_user_group
+import desktop.conf
+from desktop.lib.django_test_util import make_logged_in_client
+from desktop.lib.test_utils import grant_access
+from desktop.views import home
+from hadoop import pseudo_hdfs4
 
 import useradmin.conf
+from useradmin.forms import UserChangeForm
 import useradmin.ldap_access
-from hadoop import pseudo_hdfs4
+from useradmin.models import HuePermission, GroupPermission, UserProfile
+from useradmin.models import get_profile, get_default_user_group
 from useradmin.password_policy import reset_password_policy
 
 
@@ -46,6 +49,7 @@ def reset_all_users():
   """Reset to a clean state by deleting all users"""
   for user in User.objects.all():
     user.delete()
+
 
 def reset_all_groups():
   """Reset to a clean state by deleting all groups"""
@@ -222,6 +226,7 @@ def test_invalid_username():
 
 
 class BaseUserAdminTests(object):
+
   @classmethod
   def setUpClass(cls):
     cls._class_resets = [
@@ -242,6 +247,7 @@ class BaseUserAdminTests(object):
 
 
 class TestUserAdmin(BaseUserAdminTests):
+
   def test_group_permissions(self):
     # Get ourselves set up with a user and a group
     c = make_logged_in_client(username="test", is_superuser=True)
@@ -293,6 +299,7 @@ class TestUserAdmin(BaseUserAdminTests):
     # We should no longer have access to the app
     response = c1.get('/useradmin/users')
     assert_true('You do not have permission to access the Useradmin application.' in response.content)
+
 
   def test_default_group(self):
     resets = [
@@ -389,6 +396,7 @@ class TestUserAdmin(BaseUserAdminTests):
     group_count = len(Group.objects.all())
     response = c.post('/useradmin/groups/new', dict(name="with space"))
     assert_equal(len(Group.objects.all()), group_count + 1)
+
 
   def test_user_admin_password_policy(self):
     # Set up password policy
@@ -575,7 +583,7 @@ class TestUserAdmin(BaseUserAdminTests):
       assert_equal(["Passwords do not match."], response.context["form"]["password2"].errors, "Should have complained about mismatched password")
       # Old password not confirmed
       response = c.post('/useradmin/users/edit/test', dict(username="test", first_name="Tom", last_name="Tester", password1="foo", password2="foo", is_active=True, is_superuser=True))
-      assert_equal(["The old password does not match the current password."], response.context["form"]["password_old"].errors, "Should have complained about old password")
+      assert_equal([UserChangeForm.GENERIC_VALIDATION_ERROR], response.context["form"]["password_old"].errors, "Should have complained about old password")
       # Good now
       response = c.post('/useradmin/users/edit/test', dict(username="test", first_name="Tom", last_name="Tester", password1="foo", password2="foo", password_old="test", is_active=True, is_superuser=True))
       assert_true(User.objects.get(username="test").is_superuser)
@@ -593,7 +601,7 @@ class TestUserAdmin(BaseUserAdminTests):
 
       # Create a new regular user (duplicate name)
       response = c.post('/useradmin/users/new', dict(username="test", password1="test", password2="test"))
-      assert_equal({ 'username': ["User with this Username already exists."]}, response.context["form"].errors)
+      assert_equal({ 'username': [UserChangeForm.GENERIC_VALIDATION_ERROR]}, response.context["form"].errors)
 
       # Create a new regular user (for real)
       response = c.post('/useradmin/users/new', dict(username=FUNNY_NAME,
@@ -684,7 +692,6 @@ class TestUserAdmin(BaseUserAdminTests):
         reset()
 
 
-
   def test_list_for_autocomplete(self):
     # Now the autocomplete has access to all the users and groups
     c1 = make_logged_in_client('test_list_for_autocomplete', is_superuser=False, groupname='test_list_for_autocomplete')
@@ -725,7 +732,29 @@ class TestUserAdmin(BaseUserAdminTests):
     assert_true(u'test_list_for_autocomplete_other_group' in groups, groups)
 
 
+  def test_language_preference(self):
+    # Test that language selection appears in Edit Profile for current user
+    client = make_logged_in_client('test', is_superuser=False, groupname='test')
+    user = User.objects.get(username='test')
+    grant_access('test', 'test', 'useradmin')
+
+    response = client.get('/useradmin/users/edit/test')
+    assert_true("Language Preference" in response.content)
+
+    # Does not appear for superuser editing other profiles
+    other_client = make_logged_in_client('test_super', is_superuser=True, groupname='test')
+    superuser = User.objects.get(username='test_super')
+
+    response = other_client.get('/useradmin/users/edit/test')
+    assert_false("Language Preference" in response.content, response.content)
+
+    # Changing language preference will change language setting
+    response = client.post('/useradmin/users/edit/test', dict(language='ko'))
+    assert_true('<option value="ko" selected="selected">Korean</option>' in response.content)
+
+
 class TestUserAdminWithHadoop(BaseUserAdminTests):
+
   requires_hadoop = True
 
   def test_ensure_home_directory(self):
@@ -766,6 +795,7 @@ class TestUserAdminWithHadoop(BaseUserAdminTests):
       for reset in resets:
         reset()
 
+
 class MockLdapConnection(object):
   def __init__(self, ldap_config, ldap_url, username, password, ldap_cert):
     self.ldap_config = ldap_config
@@ -773,6 +803,7 @@ class MockLdapConnection(object):
     self.username = username
     self.password = password
     self.ldap_cert = ldap_cert
+
 
 def test_get_connection_bind_password():
   # Unfortunately our tests leak a cached test ldap connection across functions, so we need to clear it out.
@@ -802,6 +833,7 @@ def test_get_connection_bind_password():
     useradmin.ldap_access.LdapConnection = OriginalLdapConnection
     for f in reset:
       f()
+
 
 def test_get_connection_bind_password_script():
   # Unfortunately our tests leak a cached test ldap connection across functions, so we need to clear it out.
@@ -837,7 +869,50 @@ def test_get_connection_bind_password_script():
     for f in reset:
       f()
 
-def test_last_activity():
-  c = make_logged_in_client(username="test", is_superuser=True)
-  profile = UserProfile.objects.get(user__username='test')
-  assert_not_equal(profile.last_activity, 0)
+
+class LastActivityMiddlewareTests(object):
+
+  def test_last_activity(self):
+    c = make_logged_in_client(username="test", is_superuser=True)
+    profile = UserProfile.objects.get(user__username='test')
+    assert_not_equal(profile.last_activity, 0)
+
+
+  def test_idle_timeout(self):
+    timeout = 5
+    reset = [
+      desktop.conf.AUTH.IDLE_SESSION_TIMEOUT.set_for_testing(timeout)
+    ]
+    try:
+      c = make_logged_in_client(username="test", is_superuser=True)
+      response = c.get(reverse(home))
+      assert_equal(200, response.status_code)
+
+      # Assert after timeout that user is redirected to login
+      time.sleep(timeout)
+      response = c.get(reverse(home))
+      assert_equal(302, response.status_code)
+    finally:
+      for f in reset:
+        f()
+
+  def test_ignore_jobbrowser_polling(self):
+    timeout = 5
+    reset = [
+      desktop.conf.AUTH.IDLE_SESSION_TIMEOUT.set_for_testing(timeout)
+    ]
+    try:
+      c = make_logged_in_client(username="test", is_superuser=True)
+      response = c.get(reverse(home))
+      assert_equal(200, response.status_code)
+
+      # Assert that jobbrowser polling does not reset idle time
+      time.sleep(2)
+      c.get('jobbrowser/?format=json&state=running&user=%s' % "test")
+      time.sleep(3)
+
+      response = c.get(reverse(home))
+      assert_equal(302, response.status_code)
+    finally:
+      for f in reset:
+        f()

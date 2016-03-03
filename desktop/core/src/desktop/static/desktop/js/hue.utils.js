@@ -116,6 +116,10 @@ Array.prototype.diff = function (a) {
     return $('<div/>').text(value).html();
   };
 
+  hueUtils.html2text = function (value){
+    return $('<div/>').html(value).text();
+  };
+
   hueUtils.goFullScreen = function () {
     if (!document.fullscreenElement && !document.mozFullScreenElement && !document.webkitFullscreenElement && !document.msFullscreenElement) {
       if (document.documentElement.requestFullscreen) {
@@ -147,6 +151,10 @@ Array.prototype.diff = function (a) {
 
   hueUtils.changeURL = function (newURL) {
     window.history.pushState(null, null, newURL);
+  }
+
+  hueUtils.replaceURL = function (newURL) {
+    window.history.replaceState(null, null, newURL);
   }
 
   /**
@@ -238,7 +246,7 @@ var huePubSub = (function () {
 
   return {
     subscribe: function (topic, listener) {
-      if(! hOP.call(topics, topic)) {
+      if (!hOP.call(topics, topic)) {
         topics[topic] = [];
       }
 
@@ -251,20 +259,23 @@ var huePubSub = (function () {
       };
     },
     subscribeOnce: function (topic, listener) {
-      var ephemeral = this.subscribe(topic, function(){
+      var ephemeral = this.subscribe(topic, function () {
         listener.apply(arguments);
         ephemeral.remove();
       });
 
     },
     publish: function (topic, info) {
-      if (! hOP.call(topics, topic)) {
+      if (!hOP.call(topics, topic)) {
         return;
       }
 
       topics[topic].forEach(function (item) {
         item(info);
       });
+    },
+    getTopics: function () {
+      return topics;
     }
   };
 })();

@@ -325,7 +325,6 @@ def list_oozie_workflow(request, job_id):
       if hue_workflow: hue_workflow.document.doc.get().can_read_or_exception(request.user)
 
       if hue_workflow:
-        workflow_graph = ''
         full_node_list = hue_workflow.nodes
         workflow_id = hue_workflow.id
         wid = {
@@ -334,11 +333,13 @@ def list_oozie_workflow(request, job_id):
         doc = Document2.objects.get(type='oozie-workflow2', **wid)
         new_workflow = get_workflow()(document=doc)
         workflow_data = new_workflow.get_data()
-        credentials = Credentials()
       else:
-        # For workflows submitted from CLI or deleted in the editor
-        # Until better parsing in https://issues.cloudera.org/browse/HUE-2659
-        workflow_graph, full_node_list = OldWorkflow.gen_status_graph_from_xml(request.user, oozie_workflow)
+        try:
+          workflow_data = Workflow.gen_workflow_data_from_xml(request.user, oozie_workflow)
+        except Exception, e:
+          LOG.exception('Graph data could not be generated from Workflow %s: %s' % (oozie_workflow.id, e))
+      workflow_graph = ''
+      credentials = Credentials()
     except:
       LOG.exception("Error generating full page for running workflow %s" % job_id)
   else:
@@ -1072,7 +1073,7 @@ def massaged_oozie_jobs_for_json(oozie_jobs, user, just_sla=False):
         'frequency': hasattr(job, 'frequency') and Coordinator.CRON_MAPPING.get(job.frequency, job.frequency) or None,
         'timeUnit': hasattr(job, 'timeUnit') and job.timeUnit or None,
         'parentUrl': hasattr(job, 'parentId') and job.parentId and get_link(job.parentId) or '',
-        'submittedManually': hasattr(job, 'parentId') and _submitted_manually(job, user)
+        'submittedManually': hasattr(job, 'parentId') and (job.parentId is None or 'C@' not in job.parentId)
       }
       jobs.append(massaged_job)
 
@@ -1134,27 +1135,3 @@ def has_job_edition_permission(oozie_job, user):
 
 def has_dashboard_jobs_access(user):
   return user.is_superuser or user.has_hue_permission(action="dashboard_jobs_access", app=DJANGO_APPS[0])
-
-
-def _submitted_manually(job, user):
-  parent_id = job.parentId
-  if not parent_id:
-    return True
-  if 'C@' in parent_id:
-    return False
-
-  oozie_api = get_oozie(user)
-  if parent_id.endswith('W'):
-    get_job = oozie_api.get_job
-  elif parent_id.endswith('C'):
-    get_job = oozie_api.get_coordinator
-  else:
-    get_job = oozie_api.get_bundle
-
-  try:
-    job = get_job(parent_id)
-  except:
-    LOG.exception('failed to get job')
-    return True
-
-  return _submitted_manually(job, user)

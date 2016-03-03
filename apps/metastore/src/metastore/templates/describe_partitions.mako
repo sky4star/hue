@@ -66,16 +66,19 @@ ${ assist.assistPanel() }
           <div class="assist" data-bind="component: {
               name: 'assist-panel',
               params: {
-                sourceTypes: [{
-                  name: 'hive',
-                  type: 'hive'
-                }],
-                user: '${user.username}',
-                navigationSettings: {
-                  openItem: true,
-                  showPreview: true,
-                  showStats: false
-                }
+                sql: {
+                  sourceTypes: [{
+                    name: 'hive',
+                    type: 'hive'
+                  }],
+                  user: '${user.username}',
+                  navigationSettings: {
+                    openItem: false,
+                    showPreview: true,
+                    showStats: true
+                  }
+                },
+                visibleAssistPanels: ['sql']
               }
             }"></div>
         </div>
@@ -188,10 +191,11 @@ ${ assist.assistPanel() }
 
     function PartitionViewModel(options, partition_keys_json, partition_values_json) {
       var self = this;
+      self.assistHelper = AssistHelper.getInstance(options);
       self.assistAvailable = ko.observable(true);
-      self.isLeftPanelVisible = ko.observable(self.assistAvailable() && $.totalStorage('spark_left_panel_visible') != null && $.totalStorage('spark_left_panel_visible'));
+      self.isLeftPanelVisible = ko.observable();
+      self.assistHelper.withTotalStorage('assist', 'assist_panel_visible', self.isLeftPanelVisible, true);
 
-      self.assistHelper = new AssistHelper(options);
 
       self.isLoading = ko.observable(false);
 
@@ -240,11 +244,11 @@ ${ assist.assistPanel() }
         _filters.forEach(function (filter) {
           _postData[filter.column] = filter.value;
         });
-        _postData["sort"] = viewModel.sortDesc() ? "desc" : "asc";
+        _postData["sort"] = self.sortDesc() ? "desc" : "asc";
 
         $.ajax({
           type: "POST",
-          url: "/metastore/table/default/blog/partitions",
+          url: '/metastore/table/' + '${ database }' + '/' + '${ table.name }' + '/partitions',
           data: _postData,
           success: function (data) {
             self.values(data.partition_values_json);
@@ -260,10 +264,6 @@ ${ assist.assistPanel() }
 
       huePubSub.subscribe("assist.database.selected", function (databaseDef) {
         location.href = '/metastore/tables/' + databaseDef.name;
-      });
-
-      self.isLeftPanelVisible.subscribe(function (newValue) {
-        $.totalStorage('spark_left_panel_visible', newValue);
       });
     }
 

@@ -285,6 +285,7 @@ class OozieMockBase(object):
     grant_access("test", "test", "oozie")
     add_to_group("test")
     self.user = User.objects.get(username='test')
+
     self.wf = create_workflow(self.c, self.user)
     self.original_fs = originalCluster.FS_CACHE["default"]
     originalCluster.FS_CACHE["default"] = MockFs()
@@ -391,6 +392,7 @@ class OozieBase(OozieServerProvider):
     grant_access("test", "test", "oozie")
     add_to_group("test")
     self.cluster = OozieServerProvider.cluster
+
     self.install_examples()
 
   def install_examples(self):
@@ -3137,7 +3139,7 @@ class TestOozieSubmissions(OozieBase):
 
   def test_submit_hiveserver2_action(self):
     wf_uuid = "c1c3cba9-edec-fb6f-a526-9f80b66fe993"
-    wf = Document2.objects.get(uuid=wf_uuid)
+    wf = Document2.objects.get_by_uuid(uuid=wf_uuid)
     wf.data.replace('hive2://localhost:10000/default', _get_hiveserver2_url())
     wf.save()
 
@@ -3161,7 +3163,7 @@ class TestOozieSubmissions(OozieBase):
 
   def test_submit_spark_action(self):
     wf_uuid = "2d667ab2-70f9-c2bf-0726-abe84fa7130d"
-    wf = Document2.objects.get(uuid=wf_uuid)
+    wf = Document2.objects.get_by_uuid(uuid=wf_uuid)
 
     # Somewhere we delete those by mistake
     doc = Document.objects.link(wf, owner=wf.owner, name=wf.name, description=wf.description, extra='workflow2')

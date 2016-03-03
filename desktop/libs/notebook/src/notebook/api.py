@@ -22,12 +22,11 @@ from django.http import HttpResponseBadRequest, HttpResponseRedirect
 from django.utils.translation import ugettext as _
 from django.views.decorators.http import require_GET, require_POST
 
-from desktop.decorators import check_document_access_permission
 from desktop.lib.django_util import JsonResponse
 from desktop.models import Document2, Document
 
 from notebook.connectors.base import get_api, Notebook, QueryExpired
-from notebook.decorators import api_error_handler, check_document_modify_permission
+from notebook.decorators import api_error_handler, check_document_access_permission, check_document_modify_permission
 from notebook.github import GithubClient
 from notebook.models import escape_rows
 
@@ -52,7 +51,7 @@ def create_session(request):
     if any(old_session) and 'properties' in old_session[0]:
       properties = old_session[0]['properties']
 
-  response['session'] = get_api(request.user, session, request.fs, request.jt).create_session(lang=session['type'], properties=properties)
+  response['session'] = get_api(request, session).create_session(lang=session['type'], properties=properties)
   response['status'] = 0
 
   return JsonResponse(response)
@@ -66,7 +65,7 @@ def close_session(request):
 
   session = json.loads(request.POST.get('session', '{}'))
 
-  response['session'] = get_api(request.user, {'type': session['type']}, request.fs, request.jt).close_session(session=session)
+  response['session'] = get_api(request, {'type': session['type']}).close_session(session=session)
   response['status'] = 0
 
   return JsonResponse(response)
@@ -81,7 +80,7 @@ def execute(request):
   notebook = json.loads(request.POST.get('notebook', '{}'))
   snippet = json.loads(request.POST.get('snippet', '{}'))
 
-  response['handle'] = get_api(request.user, snippet, request.fs, request.jt).execute(notebook, snippet)
+  response['handle'] = get_api(request, snippet).execute(notebook, snippet)
 
   # Materialize and HTML escape results
   if response['handle'].get('sync') and response['handle']['result'].get('data'):
@@ -101,7 +100,7 @@ def check_status(request):
   notebook = json.loads(request.POST.get('notebook', '{}'))
   snippet = json.loads(request.POST.get('snippet', '{}'))
 
-  response['query_status'] = get_api(request.user, snippet, request.fs, request.jt).check_status(notebook, snippet)
+  response['query_status'] = get_api(request, snippet).check_status(notebook, snippet)
   response['status'] = 0
 
   return JsonResponse(response)
@@ -118,7 +117,7 @@ def fetch_result_data(request):
   rows = json.loads(request.POST.get('rows', 100))
   start_over = json.loads(request.POST.get('startOver', False))
 
-  response['result'] = get_api(request.user, snippet, request.fs, request.jt).fetch_result(notebook, snippet, rows, start_over)
+  response['result'] = get_api(request, snippet).fetch_result(notebook, snippet, rows, start_over)
 
   # Materialize and HTML escape results
   if response['result'].get('data') and response['result'].get('type') == 'table':
@@ -138,7 +137,7 @@ def fetch_result_metadata(request):
   notebook = json.loads(request.POST.get('notebook', '{}'))
   snippet = json.loads(request.POST.get('snippet', '{}'))
 
-  response['result'] = get_api(request.user, snippet, request.fs, request.jt).fetch_result_metadata(notebook, snippet)
+  response['result'] = get_api(request, snippet).fetch_result_metadata(notebook, snippet)
   response['status'] = 0
 
   return JsonResponse(response)
@@ -153,7 +152,7 @@ def cancel_statement(request):
   notebook = json.loads(request.POST.get('notebook', '{}'))
   snippet = json.loads(request.POST.get('snippet', '{}'))
 
-  response['result'] = get_api(request.user, snippet, request.fs, request.jt).cancel(notebook, snippet)
+  response['result'] = get_api(request, snippet).cancel(notebook, snippet)
   response['status'] = 0
 
   return JsonResponse(response)
@@ -174,7 +173,7 @@ def get_logs(request):
   size = request.POST.get('size')
   size = int(size) if size else None
 
-  db = get_api(request.user, snippet, request.fs, request.jt)
+  db = get_api(request, snippet)
 
   logs = db.get_log(notebook, snippet, startFrom=startFrom, size=size)
 
@@ -228,26 +227,30 @@ def save_notebook(request):
 
 
 @require_POST
-@check_document_modify_permission()
+@api_error_handler
+@check_document_access_permission()
 def historify(request):
   response = {'status': -1}
 
-  history = json.loads(request.POST.get('notebook', '{}'))
-  query_type = history['type']
+  notebook = json.loads(request.POST.get('notebook', '{}'))
+  query_type = notebook['type']
 
-  history_doc = Document2.objects.create(name=history['name'], type=query_type, owner=request.user, is_history=True)
-  Document.objects.link(history_doc, owner=history_doc.owner, name=history_doc.name, description=history_doc.description, extra=query_type)
+  history_doc = Document2.objects.create(
+    name=notebook['name'],
+    type=query_type,
+    owner=request.user,
+    is_history=True
+  )
+  Document.objects.link(
+    history_doc,
+    name=history_doc.name,
+    owner=history_doc.owner,
+    description=history_doc.description,
+    extra=query_type
+  )
 
-  history_doc1 = history_doc.doc.get()
-  history_doc.update_data(history)
-  history_doc.name = history_doc1.name = history['name']
-  history_doc.description = history_doc1.description = history.get('description', '')
-  history_doc.is_history = True
+  history_doc.update_data(notebook)
   history_doc.save()
-  history_doc1.save()
-
-  if history.get('id'): # If we come from a saved query
-    Document2.objects.get(id=history['id']).dependencies.add(history_doc)
 
   response['status'] = 0
   response['id'] = history_doc.id
@@ -257,6 +260,8 @@ def historify(request):
 
 
 @require_GET
+@api_error_handler
+@check_document_access_permission()
 def get_history(request):
   response = {'status': -1}
 
@@ -275,6 +280,7 @@ def get_history(request):
 
 
 @require_POST
+@api_error_handler
 @check_document_modify_permission()
 def clear_history(request):
   response = {'status': -1}
@@ -314,7 +320,7 @@ def close_notebook(request):
 
   for session in notebook['sessions']:
     try:
-      response['result'].append(get_api(request.user, session, request.fs, request.jt).close_session(session))
+      response['result'].append(get_api(request, session).close_session(session))
     except QueryExpired:
       pass
     except Exception, e:
@@ -336,7 +342,7 @@ def close_statement(request):
   snippet = json.loads(request.POST.get('snippet', '{}'))
 
   try:
-    response['result'] = get_api(request.user, snippet, request.fs, request.jt).close_statement(snippet)
+    response['result'] = get_api(request, snippet).close_statement(snippet)
   except QueryExpired:
     pass
 
@@ -349,7 +355,7 @@ def close_statement(request):
 @require_POST
 @check_document_access_permission()
 @api_error_handler
-def autocomplete(request, database=None, table=None, column=None, nested=None):
+def autocomplete(request, server=None, database=None, table=None, column=None, nested=None):
   response = {'status': -1}
 
   # Passed by check_document_access_permission but unused by APIs
@@ -357,9 +363,31 @@ def autocomplete(request, database=None, table=None, column=None, nested=None):
   snippet = json.loads(request.POST.get('snippet', '{}'))
 
   try:
-    autocomplete_data = get_api(request.user, snippet, request.fs, request.jt).autocomplete(snippet, database, table, column, nested)
+    autocomplete_data = get_api(request, snippet).autocomplete(snippet, database, table, column, nested)
     response.update(autocomplete_data)
   except QueryExpired:
+    pass
+
+  response['status'] = 0
+
+  return JsonResponse(response)
+
+
+@require_POST
+@check_document_access_permission()
+@api_error_handler
+def get_sample_data(request, server=None, database=None, table=None):
+  response = {'status': -1}
+
+  # Passed by check_document_access_permission but unused by APIs
+  notebook = json.loads(request.POST.get('notebook', '{}'))
+  snippet = json.loads(request.POST.get('snippet', '{}'))
+
+  try:
+    sample_data = get_api(request, snippet).get_sample_data(snippet, database, table)
+    response.update(sample_data)
+  except QueryExpired, e:
+    LOG.debug('get_sample_data query expired: %s' % e)
     pass
 
   response['status'] = 0

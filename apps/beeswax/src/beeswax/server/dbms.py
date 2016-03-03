@@ -143,23 +143,15 @@ class HiveServer2Dbms(object):
 
 
   def get_databases(self, database_names='*'):
-    identifier = self.to_matching_wildcard(database_names)
+    if database_names != '*':
+      database_names = self.to_matching_wildcard(database_names)
 
-    hql = "SHOW DATABASES LIKE '%s'" % (identifier) # self.client.get_databases() is too slow
-    query = hql_query(hql)
-    timeout = SERVER_CONN_TIMEOUT.get()
+    databases = self.client.get_databases(schemaName=database_names)
 
-    handle = self.execute_and_wait(query, timeout_sec=timeout)
+    if len(databases) <= APPLY_NATURAL_SORT_MAX.get():
+      databases = apply_natural_sort(databases)
 
-    if handle:
-      result = self.fetch(handle, rows=5000)
-      self.close(handle)
-      databases = [name for database in result.rows() for name in database]
-      if len(databases) <= APPLY_NATURAL_SORT_MAX.get():
-        databases = apply_natural_sort(databases)
-      return databases
-    else:
-      return []
+    return databases
 
 
   def get_database(self, database):
@@ -793,6 +785,10 @@ class HiveServer2Dbms(object):
       result = self.fetch(handle, rows=5000)
 
     return result
+
+
+  def get_configuration(self):
+    return self.client.get_configuration()
 
 
   def get_functions(self, prefix=None):

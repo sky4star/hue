@@ -66,6 +66,56 @@
     }
   };
 
+  /**
+   * Binding for adding a spinner to the page
+   *
+   * Example:
+   *
+   * <!-- ko hueSpinner: loading --><!-- /ko -->
+   *
+   * Or with options:
+   *
+   * <!-- ko hueSpinner: { spin: loading, center: true, size: 'large' } --><!-- /ko -->
+   *
+   */
+  ko.bindingHandlers.hueSpinner = {
+    update: function (element, valueAccessor) {
+      var value = ko.unwrap(valueAccessor);
+
+      var options = {
+        size: 'default',
+        center: false
+      };
+
+      var spin = false;
+      if (ko.isObservable(valueAccessor())) {
+        spin = value();
+      } else {
+        var value = valueAccessor();
+        $.extend(options, value);
+        spin = ko.isObservable(value.spin) ? value.spin() : value.spin;
+      }
+
+      ko.virtualElements.emptyNode(element);
+
+      if (spin) {
+        var container = document.createElement('DIV');
+        container.className = 'hue-spinner';
+        var spinner = document.createElement('I');
+        spinner.className = 'fa fa-spinner fa-spin';
+        if (options.size === 'large') {
+          spinner.className += ' hue-spinner-large';
+        }
+        if (options.center) {
+          spinner.className += ' hue-spinner-center';
+        }
+        container.appendChild(spinner);
+        ko.virtualElements.prepend(element, container);
+      }
+    }
+  };
+  ko.virtualElements.allowedBindings.hueSpinner = true;
+
   ko.bindingHandlers.visibleOnHover = {
     init: function (element, valueAccessor, allBindings, viewModel, bindingContext) {
       var options = valueAccessor();
@@ -73,7 +123,7 @@
 
       var selector = options.selector;
       var hideTimeout = -1;
-      var override = options.override && ! ko.isObservable(options.override);
+      ko.utils.domData.set(element, 'visibleOnHover.override', ko.utils.unwrapObservable(options.override) || false)
       var inside = false;
 
       var show = function () {
@@ -82,24 +132,17 @@
       };
 
       var hide = function () {
-        hideTimeout = window.setTimeout(function () {
-          $element.find(selector).fadeTo("normal", 0);
-        }, 50);
+        if (! inside) {
+          hideTimeout = window.setTimeout(function () {
+            $element.find(selector).fadeTo("normal", 0);
+          }, 50);
+        }
       };
 
-      if (ko.isObservable(options.override)) {
-        override = options.override();
-        options.override.subscribe(function (newValue) {
-          override = newValue;
-          if (newValue) {
-            show();
-          } else if (! inside) {
-            hide();
-          }
-        })
-      }
+      ko.utils.domData.set(element, 'visibleOnHover.show', show)
+      ko.utils.domData.set(element, 'visibleOnHover.hide', hide)
 
-      if (override) {
+      if (ko.utils.domData.get(element, 'visibleOnHover.override')) {
         window.setTimeout(show, 1);
       }
 
@@ -110,10 +153,39 @@
 
       $element.mouseleave(function () {
         inside = false;
-        if (! override) {
+        if (! ko.utils.domData.get(element, 'visibleOnHover.override')) {
           hide();
         }
       });
+    },
+    update: function (element, valueAccessor, allBindings, viewModel, bindingContext) {
+      if (ko.utils.unwrapObservable(valueAccessor().override)) {
+        ko.utils.domData.set(element, 'visibleOnHover.override', true)
+        ko.utils.domData.get(element, 'visibleOnHover.show')()
+      } else {
+        ko.utils.domData.set(element, 'visibleOnHover.override', false)
+        ko.utils.domData.get(element, 'visibleOnHover.hide')();
+      }
+    }
+  };
+
+  /**
+   * This binding can be used to toggle a boolean value on click
+   *
+   * Example:
+   *
+   * <div databind="toggle: value">...</div>
+   *
+   * @type {{init: ko.bindingHandlers.toggle.init}}
+   */
+  ko.bindingHandlers.toggle = {
+    init: function (element, valueAccessor, allBindings, viewModel, bindingContext) {
+      var value = valueAccessor();
+      ko.bindingHandlers.click.init(element, function () {
+        return function () {
+          value(! value());
+        }
+      }, allBindings, viewModel, bindingContext);
     }
   };
 
@@ -122,9 +194,10 @@
       var value = valueAccessor();
       $(element).toggle(ko.unwrap(value));
     },
-    update: function (element, valueAccessor) {
+    update: function (element, valueAccessor, allBindings) {
       var value = valueAccessor();
-      ko.unwrap(value) ? $(element).slideDown(100) : $(element).slideUp(100);
+      var onComplete = ko.unwrap(allBindings()).onComplete;
+      ko.unwrap(value) ? $(element).slideDown(100, onComplete ? onComplete() : function(){}) : $(element).slideUp(100, onComplete ? onComplete() : function(){});
     }
   };
 
@@ -147,6 +220,99 @@
       } else {
         $(element).hide();
       }
+    }
+  };
+
+  /**
+   * This binding can be used to show a custom context menu on right-click,
+   * It assumes that the context menu is nested within the bound element and
+   * the selector for the menu has to be supplied as a parameter.
+   *
+   * Example:
+   *
+   * <div data-bind="contextMenu: {
+   *   menuSelector: '.hue-context-menu',
+   *   beforeOpen: function () { ... }
+   * }">
+   *   <ul class="hue-context-menu">...</ul>
+   * </div>
+   *
+   */
+  ko.bindingHandlers.contextMenu = {
+    init: function (element, valueAccessor, allBindings, viewModel, bindingContext) {
+      var $element = $(element);
+      var options = valueAccessor();
+      var $menu = $element.find(options.menuSelector);
+      var active = false;
+
+      bindingContext.$altDown = ko.observable(false);
+
+      window.addEventListener("keydown", function (e) {
+        bindingContext.$altDown(e.altKey);
+      });
+
+      window.addEventListener("keyup", function (e) {
+        bindingContext.$altDown(false);
+      });
+
+      element.addEventListener("contextmenu", function(e) {
+        if(document.selection && document.selection.empty) {
+          document.selection.empty();
+        } else if(window.getSelection) {
+          var sel = window.getSelection();
+          sel.removeAllRanges();
+        }
+        if (typeof options.beforeOpen === 'function') {
+          options.beforeOpen.bind(viewModel)();
+        }
+        $menu.css('top', 0);
+        $menu.css('left', 0);
+        $menu.css('opacity', 0);
+        $menu.show();
+        var menuWidth = $menu.outerWidth(true)
+        if (event.clientX + menuWidth > $(window).width()) {
+          $menu.css('left', event.clientX - menuWidth);
+        } else {
+          $menu.css('left', event.clientX);
+        }
+
+        var menuHeight = $menu.outerHeight(true);
+        if (event.clientY + menuHeight > $(window).height()) {
+          $menu.css('top', $(window).height() - menuHeight);
+        } else {
+          $menu.css('top', event.clientY);
+        }
+        $menu.css('opacity', 1);
+        active = true;
+        huePubSub.publish('contextmenu-active', element);
+        e.preventDefault();
+        e.stopPropagation();
+      });
+
+      var hideMenu = function () {
+        if (active) {
+          $menu.css('opacity', 0);
+          window.setTimeout(function () {
+            $menu.hide();
+          }, 300);
+          active = false;
+        }
+      };
+
+      huePubSub.subscribe('contextmenu-active', function (origin) {
+        if (origin !== element) {
+          hideMenu();
+        }
+      });
+      document.addEventListener("contextmenu", function (event) {
+        hideMenu();
+      });
+      $menu.click(function (e) {
+        hideMenu();
+        e.stopPropagation();
+      });
+      $element.click(hideMenu);
+      $(document).click(hideMenu);
     }
   };
 
@@ -326,6 +492,8 @@
         $element.popover('hide');
         visible = false;
       };
+
+      huePubSub.subscribe('close.popover', hidePopover);
 
       var showPopover = function () {
         ko.renderTemplate(options.contentTemplate, viewModel, {
@@ -937,6 +1105,30 @@
     }
   };
 
+  ko.bindingHandlers.stretchDown = {
+    init: function (element) {
+      var $element = $(element);
+      var $parent = $element.parent();
+
+      var lastParentHeight = -1;
+      var lastTop = -1;
+
+      function stretch(force) {
+        if (lastParentHeight !== $parent.innerHeight() || lastTop !== $element.position().top || force) {
+          lastParentHeight = $parent.innerHeight();
+          lastTop = $element.position().top;
+          $element.height(lastParentHeight - lastTop - ($element.outerHeight(true) - $element.innerHeight()));
+          huePubSub.publish('assist.stretchDown', $element);
+        }
+      }
+
+      window.setInterval(stretch, 200);
+      huePubSub.subscribe('assist.forceStretchDown', function(){
+        stretch(true);
+      });
+    }
+  };
+
   ko.bindingHandlers.assistVerticalResizer = {
     init: function (element, valueAccessor) {
       var $container = $(element);
@@ -979,7 +1171,14 @@
         $allExtras.show();
       }
       if (panelDefinitions().length === 1) {
-        $allPanels.height($container.innerHeight() - allExtrasHeight);
+        var adjustHeightSingle = function () {
+          $allPanels.height($container.innerHeight() - allExtrasHeight);
+        }
+        window.setTimeout(adjustHeightSingle, 200);
+        $(window).resize(adjustHeightSingle);
+        huePubSub.subscribe('assist.forceRender', function () {
+          window.setTimeout(adjustHeightSingle, 200);
+        });
         $allExtras.show();
         $allPanels.show();
         return;
@@ -1001,7 +1200,7 @@
       if (totalRatios !== 1) {
         var diff = 1 / totalRatios;
         $.each(panelDefinitions(), function (idx, panel) {
-          totalRatios[panel.type] = totalRatios[panel.type] * diff;
+          panelRatios[panel.type] = panelRatios[panel.type] * diff;
         });
       }
 
@@ -1010,10 +1209,10 @@
 
       // Resizes all containers according to the set ratios
       var resizeByRatio = function () {
-        $allPanels = $container.children('.assist-inner-panel');
         if (totalHeight == $container.innerHeight()) {
           return;
         }
+        $allPanels = $container.children('.assist-inner-panel');
         totalHeight = $container.innerHeight();
         containerTop = $container.offset().top;
 
@@ -1054,6 +1253,11 @@
 
       resizeByRatio();
       $(window).resize(resizeByRatio);
+
+      window.setTimeout(resizeByRatio, 1000);
+      huePubSub.subscribe('assist.forceRender', function () {
+        window.setTimeout(resizeByRatio, 200);
+      });
 
       $allExtras.show();
       $allPanels.show();
@@ -1119,11 +1323,16 @@
           axis: "y",
           drag: function (event, ui) {
             var limitAfter = totalHeight - requiredSpaceAfter;
-
             var position = ui.offset.top - containerTop;
             if (position > limitBefore && position < limitAfter) {
               fitPanelHeights($panelsBefore, position - extrasBeforeHeight);
               fitPanelHeights($panelsAfter, totalHeight - extrasAfterHeight - position);
+            } else if (position > limitAfter) {
+              fitPanelHeights($panelsBefore, limitAfter - extrasBeforeHeight);
+              fitPanelHeights($panelsAfter, totalHeight - extrasAfterHeight - limitAfter);
+            } else if (position < limitBefore) {
+              fitPanelHeights($panelsBefore, limitBefore - extrasBeforeHeight);
+              fitPanelHeights($panelsAfter, totalHeight - extrasAfterHeight - limitBefore);
             }
 
             ui.offset.top = 0;
@@ -1139,7 +1348,8 @@
             $allPanels.each(function (idx, panel) {
               panelRatios[panelDefinitions()[idx].type] = $(panel).outerHeight(true) / totalHeightForPanels;
             });
-            assistHelper.setInTotalStorage('assist', 'innerPanelRatios', panelRatios)
+            assistHelper.setInTotalStorage('assist', 'innerPanelRatios', panelRatios);
+            $('.ps-container').perfectScrollbar('update');
           }
         });
       });
@@ -1158,7 +1368,12 @@
       var autoExpandTimeout = window.setInterval(function () {
         var chunks = Math.floor((Math.max(ace().session.getLength(), 4) - lastEditorHeight) / 4);
         if (chunks !== 0) {
-          $target.height($target.height() + 64 * chunks);
+          if (ace().session.getLength() < 2000) {
+            $target.height($target.height() + 64 * chunks);
+          }
+          else {
+            $target.height(2000 * 16); // height of 2000 lines
+          }
           ace().resize();
           lastEditorHeight += 4 * chunks;
         }
@@ -1166,6 +1381,7 @@
 
       $resizer.draggable({
         axis: "y",
+        start: options.onStart ? options.onStart : function(){},
         drag: function (event, ui) {
           clearInterval(autoExpandTimeout);
           var currentHeight = ui.offset.top - 120;
@@ -1178,6 +1394,47 @@
           ui.offset.top = 0;
           ui.position.top = 0;
           $(document).trigger("editorSizeChanged");
+        }
+      });
+    }
+  };
+
+  ko.bindingHandlers.logResizer = {
+    init: function (element, valueAccessor) {
+      var options = ko.unwrap(valueAccessor()),
+        $resizer = $(element),
+        $parent = $resizer.parents(options.parent),
+        $target = $parent.find(options.target),
+        onStart = options.onStart,
+        onResize = options.onResize;
+
+      var initialHeight = $.totalStorage('hue.editor.logs.size') || 80;
+      $target.css("height", initialHeight + "px");
+
+      var initialOffset = null;
+      $resizer.draggable({
+        axis: "y",
+        start: function (event, ui) {
+          if (onStart) {
+            onStart();
+          }
+          if (!initialOffset) {
+            initialOffset = $resizer.offset().top;
+          }
+        },
+        drag: function (event, ui) {
+          var currentHeight = (ui.offset.top - initialOffset) + initialHeight;
+          $.totalStorage('hue.editor.logs.size', currentHeight);
+          $target.css("height", currentHeight + "px");
+          ui.offset.top = 0;
+          ui.position.top = 0;
+        },
+        stop: function (event, ui) {
+          ui.offset.top = 0;
+          ui.position.top = 0;
+          if (onResize) {
+            onResize();
+          }
         }
       });
     }
@@ -1836,9 +2093,44 @@
         valueAccessor()(self.val());
       });
 
-      self.jHueHiveAutocomplete({
+      self.jHueGenericAutocomplete({
         showOnFocus: true,
         home: "/",
+        onPathChange: function (path) {
+          setPathFromAutocomplete(path);
+        },
+        onEnter: function (el) {
+          setPathFromAutocomplete(el.val());
+        },
+        onBlur: function () {
+          if (self.val().lastIndexOf(".") == self.val().length - 1) {
+            self.val(self.val().substr(0, self.val().length - 1));
+          }
+          valueAccessor()(self.val());
+        }
+      });
+    }
+  }
+
+  ko.bindingHandlers.solrchooser = {
+    init: function (element, valueAccessor, allBindingsAccessor, vm) {
+      var self = $(element);
+      self.val(valueAccessor()());
+
+      function setPathFromAutocomplete(path) {
+        self.val(path);
+        valueAccessor()(path);
+        self.blur();
+      }
+
+      self.on("blur", function () {
+        valueAccessor()(self.val());
+      });
+
+      self.jHueGenericAutocomplete({
+        showOnFocus: true,
+        home: "/",
+        serverType: "SOLR",
         onPathChange: function (path) {
           setPathFromAutocomplete(path);
         },
@@ -2218,6 +2510,9 @@
       editor.on("blur", function () {
         snippet.inFocus(false);
         snippet.statement_raw(editor.getValue());
+        if (options.onBlur) {
+          options.onBlur($el, editor.getValue());
+        }
       });
 
       var currentAssistTables = {};
@@ -2233,7 +2528,7 @@
                 currentAssistTables[tableMeta.name] = true;
               });
             },
-            errorCallback: $.noop
+            silenceErrors: true
           });
         }
       };
@@ -2415,7 +2710,7 @@
           window.open("/filebrowser/#" + token.value.replace(/\"/gi, ""));
         }
         else {
-          window.open("/metastore/table/" + assistHelper.activeDatabase() + "/" + token.value);
+          window.open("/metastore/table/" + snippet.database() + "/" + token.value);
         }
       });
 
@@ -2476,6 +2771,24 @@
         exec: function () {
           snippet.statement_raw(editor.getValue());
           snippet.execute();
+        }
+      });
+
+      editor.commands.addCommand({
+        name: "format",
+        bindKey: {win: "Ctrl-i", mac: "Command-i|Ctrl-i"},
+        exec: function () {
+          if (['ace/mode/hive', 'ace/mode/impala', 'ace/mode/sql', 'ace/mode/mysql', 'ace/mode/pgsql', 'ace/mode/sqlite', 'ace/mode/oracle'].indexOf(snippet.getAceMode()) > -1) {
+            if (vkbeautify) {
+              if (editor.getSelectedText() != '') {
+                editor.session.replace(editor.session.selection.getRange(), vkbeautify.sql(editor.getSelectedText(), 2));
+              }
+              else {
+                editor.setValue(vkbeautify.sql(editor.getValue(), 2), 1);
+                snippet.statement_raw(editor.getValue());
+              }
+            }
+          }
         }
       });
 
@@ -2637,49 +2950,583 @@
 
   ko.bindingHandlers.hueChecked = {
     after: ['value', 'attr'],
-    init: function (element, valueAccessor, allBindings) {
-      element.type = 'checkbox';
-      element.checked = false;
+    init: function (element, valueAccessor, allBindings, viewModel, bindingContext) {
+      var selectedValues = valueAccessor();
+
+      var updateCheckedState = function () {
+        ko.utils.toggleDomNodeCssClass(element, 'fa-check', selectedValues.indexOf(viewModel) > -1);
+      };
+
       ko.utils.registerEventHandler(element, 'click', function () {
-        element.checked = ! element.checked;
-        ko.utils.toggleDomNodeCssClass(element, 'fa-check', element.checked);
+        var currentIndex = selectedValues.indexOf(viewModel);
+        if (currentIndex === -1) {
+          selectedValues.push(viewModel);
+        } else if (currentIndex > -1) {
+          selectedValues.splice(currentIndex, 1);
+        }
       });
-      ko.bindingHandlers.checked.init(element, valueAccessor, allBindings);
 
-      ko.utils.toggleDomNodeCssClass(element, 'fa-check', element.checked);
-
-      valueAccessor().subscribe(function () {
-        ko.utils.toggleDomNodeCssClass(element, 'fa-check', element.checked);
-      })
+      selectedValues.subscribe(updateCheckedState);
+      updateCheckedState();
     }
   };
 
   ko.bindingHandlers.hueCheckAll = {
     init: function (element, valueAccessor, allBindings) {
-      var allSelected = ko.observable(false);
       var allValues = ko.utils.unwrapObservable(valueAccessor()).allValues;
       var selectedValues = ko.utils.unwrapObservable(valueAccessor()).selectedValues;
 
-      ko.bindingHandlers.hueChecked.init(element, function () {
-        return allSelected;
-      }, allBindings);
-
-      self.allTablesSelected = ko.observable(false);
-      self.selectedTables = ko.observableArray();
+      var updateCheckedState = function () {
+        ko.utils.toggleDomNodeCssClass(element, 'fa-check', selectedValues().length === allValues().length);
+        ko.utils.toggleDomNodeCssClass(element, 'fa-minus hue-uncheck', selectedValues().length > 0 && selectedValues().length !== allValues().length);
+      };
 
       ko.utils.registerEventHandler(element, 'click', function () {
-        if (allSelected() && selectedValues().length == 0) {
+        if (selectedValues().length == 0) {
           selectedValues(allValues().slice(0));
         } else {
           selectedValues([]);
         }
       });
 
-      selectedValues.subscribe(function (newValue) {
-        allSelected(newValue.length === allValues().length);
-        ko.utils.toggleDomNodeCssClass(element, 'fa-minus hue-uncheck', newValue.length > 0 && newValue.length !== allValues().length);
-      })
-      ko.utils.toggleDomNodeCssClass(element, 'fa-minus hue-uncheck', selectedValues().length > 0 && selectedValues().length !== allValues().length);
+      selectedValues.subscribe(updateCheckedState);
+      allValues.subscribe(updateCheckedState);
+      updateCheckedState();
+    }
+  };
+
+  /**
+   * This binding limits the rendered items based on what is visible within a scrollable container. It supports
+   * multiple any amount of nested children with foreachVisible bindings
+   *
+   * The minHeight parameter is the initial expected rendered height of each entry, once rendered the real
+   * height is used. It keeps a number of elements above and below the visible elements to make slow scrolling
+   * smooth.
+   *
+   * The height of the container element has to be less than or equal to the inner height of the window.
+   *
+   * Example:
+   *
+   * <div class=".container" style="overflow-y: scroll; height: 100px">
+   *  <ul data-bind="foreachVisible: { data: items, minHeight: 20, container: '.container' }">
+   *    <li>...</li>
+   *  </ul>
+   * </div>
+   *
+   * Currently the binding only supports one element inside the bound element otherwise the height
+   * calculations will be off. In other words this will make it go bonkers:
+   *
+   * <div class=".container" style="overflow-y: scroll; height: 100px">
+   *  <ul data-bind="foreachVisible: { data: items, minHeight: 20, container: '.container' }">
+   *    <li>...</li>
+   *    <li style="display: none;">...</li>
+   *  </ul>
+   * </div>
+   *
+   */
+  ko.bindingHandlers.foreachVisible = {
+    init: function (element, valueAccessor, allBindings, viewModel, bindingContext) {
+      return ko.bindingHandlers.template.init(element, function () {
+        return {
+          'foreach': [],
+          'templateEngine': ko.nativeTemplateEngine.instance
+        };
+      }, allBindings, viewModel, bindingContext);
+    },
+
+    update: function (element, valueAccessor, allBindings, viewModel, bindingContext) {
+      var options = valueAccessor();
+      var $element = $(element);
+      var $container = $element.closest(options.container);
+
+      var id = Math.random();
+
+      // This is possibly a parent element that has the foreachVisible binding
+      var $parentFVElement = bindingContext.$parentForeachVisible || null;
+      var parentId = bindingContext.$parentForeachVisibleId || -1;
+      // This is the element from the parent foreachVisible rendered element that contains
+      // this one or container for root
+      var $parentFVOwnerElement = $container;
+      $element.data('parentForeachVisible', $parentFVElement);
+
+      var depth = bindingContext.$depth || 0;
+
+      // Locate the owning element if within another foreach visible binding
+      if ($parentFVElement) {
+        var myOffset = $element.offset().top;
+        $parentFVElement.children().each(function (idx, child) {
+          var $child = $(child);
+          if (myOffset > $child.offset().top) {
+            $parentFVOwnerElement = $child;
+          } else {
+            return false;
+          }
+        });
+      }
+
+      if ($parentFVOwnerElement.data('disposalFunction')) {
+        $parentFVOwnerElement.data('disposalFunction')();
+        $parentFVOwnerElement.data('lastKnownHeights', null);
+      }
+
+      var entryMinHeight = options.minHeight;
+      var allEntries = ko.utils.unwrapObservable(options.data);
+
+      var visibleEntryCount = 0;
+      var incrementLimit = 0; // The diff required to re-render, set to visibleCount below
+      var elementIncrement = 0; // Elements to add on either side of the visible elements, set to 3x visibleCount
+
+      var updateVisibleEntryCount = function () {
+        // TODO: Drop the window innerHeight limitation.
+        // Sometimes after resizeWrapper() is called the reported innerHeight of the $container is the same as
+        // the wrapper causing the binding to render all the items. This limits the visibleEntryCount to the
+        // window height.
+        var newEntryCount = Math.ceil(Math.min($(window).innerHeight(), $container.innerHeight()) / entryMinHeight);
+        if (newEntryCount !== visibleEntryCount) {
+          var diff = newEntryCount - visibleEntryCount;
+          elementIncrement = options.elementIncrement || 25;
+          incrementLimit = options.incrementLimit || 5;
+          visibleEntryCount = newEntryCount;
+          endIndex += diff;
+          huePubSub.publish('foreach.visible.update', id);
+        }
+      };
+      var updateCountInterval = setInterval(updateVisibleEntryCount, 300);
+      updateVisibleEntryCount();
+
+      // In case this element was rendered before use the last known indices
+      var startIndex = $parentFVOwnerElement.data('startIndex') || 0;
+      var endIndex = $parentFVOwnerElement.data('endIndex') || (visibleEntryCount + elementIncrement);
+      if (startIndex > (allEntries.length-1)) {
+        startIndex = 0
+      }
+      if (endIndex > (allEntries.length - 1)) {
+        endIndex = allEntries.length - 1;
+      }
+
+      var childBindingContext = bindingContext.createChildContext(
+          bindingContext.$rawData,
+          null,
+          function(context) {
+            ko.utils.extend(context, {
+              $parentForeachVisible: $element,
+              $parentForeachVisibleId: id,
+              $depth: depth + 1,
+              $indexOffset: function() {
+                return startIndex;
+              }
+            });
+          });
+
+      var $wrapper = $element.parent();
+      if (!$wrapper.hasClass('foreach-wrapper')) {
+        $wrapper = $('<div>').css({
+          'position': 'relative',
+          'width': '100%'
+        }).addClass('foreach-wrapper').insertBefore($element);
+        $element.css({
+          'position': 'absolute',
+          'top': 0,
+          'width': '100%'
+        }).appendTo($wrapper);
+
+        $container.perfectScrollbar({
+          minScrollbarLength: options.minScrollbarLength || 20,
+          suppressScrollX: options.suppressScrollX || true,
+          scrollYFixedTop: options.scrollYFixedTop ? (typeof options.scrollYFixedTop == 'boolean' ? $container.position().top : options.scrollYFixedTop) : null
+        });
+        $container.on('ps-scroll-x', function () {
+          $(element).trigger('scroll');
+        });
+        $container.on('ps-scroll-y', function () {
+          $(element).trigger('scroll');
+        });
+      }
+      else {
+        window.setTimeout(function(){
+          $container.perfectScrollbar('destroy');
+          $container.perfectScrollbar({
+            minScrollbarLength: options.minScrollbarLength || 20,
+            suppressScrollX: options.suppressScrollX || true,
+            scrollYFixedTop: options.scrollYFixedTop ? (typeof options.scrollYFixedTop == 'boolean' ? $container.position().top : options.scrollYFixedTop) : null
+          });
+          $container.on('ps-scroll-x', function () {
+            $(element).trigger('scroll');
+          });
+          $container.on('ps-scroll-y', function () {
+            $(element).trigger('scroll');
+          });
+        }, 200);
+      }
+
+      // This is kept up to date with the currently rendered elements, it's used to keep track of any
+      // height changes of the elements.
+      var renderedElements = [];
+
+      if (! $parentFVOwnerElement.data('lastKnownHeights')) {
+        var lastKnownHeights = [];
+        $.each(allEntries, function () {
+          lastKnownHeights.push(entryMinHeight);
+        });
+        $parentFVOwnerElement.data('lastKnownHeights', lastKnownHeights);
+      }
+
+      var resizeWrapper = function () {
+        var totalHeight = 0;
+        var lastKnownHeights = $parentFVOwnerElement.data('lastKnownHeights');
+        $.each(lastKnownHeights, function(idx, height) {
+          totalHeight += height;
+        });
+        $wrapper.height(totalHeight + 'px');
+        $container.perfectScrollbar('update');
+      };
+      resizeWrapper();
+
+      var updateLastKnownHeights = function () {
+        if ($container.data('busyRendering')) {
+          return;
+        }
+        var lastKnownHeights = $parentFVOwnerElement.data('lastKnownHeights');
+        // Happens when closing first level and the third level is open, disposal tells the parents
+        // to update their heights...
+        if (!lastKnownHeights) {
+          return;
+        }
+        var diff = false;
+        $.each(renderedElements, function (idx, renderedElement) {
+          // TODO: Figure out why it goes over index at the end scroll position
+          if (startIndex + idx < lastKnownHeights.length) {
+            var renderedHeight = $(renderedElement).outerHeight(true);
+            if (lastKnownHeights[startIndex + idx] !== renderedHeight) {
+              lastKnownHeights[startIndex + idx] = renderedHeight;
+              diff = true;
+            }
+          }
+        });
+        // Only resize if a difference in height was noticed.
+        if (diff) {
+          $parentFVOwnerElement.data('lastKnownHeights', lastKnownHeights);
+          resizeWrapper();
+        }
+      };
+
+      var updateHeightsInterval = window.setInterval(updateLastKnownHeights, 600);
+
+      huePubSub.subscribe('foreach.visible.update.heights', function (targetId) {
+        if (targetId === id) {
+          clearInterval(updateHeightsInterval);
+          updateLastKnownHeights();
+          huePubSub.publish('foreach.visible.update.heights', parentId);
+          updateHeightsInterval = window.setInterval(updateLastKnownHeights, 600);
+        }
+      });
+
+      updateLastKnownHeights();
+
+      var positionList = function () {
+        var lastKnownHeights = $parentFVOwnerElement.data('lastKnownHeights');
+        if (! lastKnownHeights) {
+          return;
+        }
+        var top = 0;
+        for (var i = 0; i < startIndex; i++) {
+          top += lastKnownHeights[i];
+        }
+        $element.css('top', top + 'px');
+      };
+
+      var afterRender = function () {
+        renderedElements = $element.children();
+        $container.data('busyRendering', false);
+        huePubSub.publish('foreach.visible.update.heights', id);
+      };
+
+      var render = function () {
+        if (endIndex === 0 && allEntries.length > 1 || endIndex < 0) {
+          ko.bindingHandlers.template.update(element, function () {
+            return {
+              'foreach': [],
+              'templateEngine': ko.nativeTemplateEngine.instance,
+              'afterRender': function () {
+                // This is called once for each added element (not when elements are removed)
+                clearTimeout(throttle);
+                throttle = setTimeout(afterRender, 0);
+              }
+            };
+          }, allBindings, viewModel, childBindingContext);
+          return;
+        }
+        $container.data('busyRendering', true);
+        // Save the start and end index for when the list is removed and is shown again.
+        $parentFVOwnerElement.data('startIndex', startIndex);
+        $parentFVOwnerElement.data('endIndex', endIndex);
+        positionList();
+
+
+        // This is to ensure that our afterRender is called (the afterRender of KO below isn't called
+        // when only elements are removed)
+        var throttle = setTimeout(afterRender, 0);
+
+        ko.bindingHandlers.template.update(element, function () {
+          return {
+            'foreach': allEntries.slice(startIndex, endIndex + 1),
+            'templateEngine': ko.nativeTemplateEngine.instance,
+            'afterRender': function () {
+              // This is called once for each added element (not when elements are removed)
+              clearTimeout(throttle);
+              throttle = setTimeout(afterRender, 0);
+            }
+          };
+        }, allBindings, viewModel, childBindingContext);
+      };
+
+      var setStartAndEndFromScrollTop = function () {
+        var lastKnownHeights = $parentFVOwnerElement.data('lastKnownHeights');
+
+        var parentSpace = 0;
+
+        var $lastParent = $parentFVElement;
+        var $lastRef = $element;
+        var $parentOwner;
+
+        while ($lastParent) {
+          var lastRefOffset = $lastRef.offset().top;
+          var lastAddedSpace = 0;
+          $lastParent.children().each(function (idx, child) {
+            var $child = $(child);
+            if (lastRefOffset > $child.offset().top) {
+              lastAddedSpace = $child.outerHeight(true);
+              parentSpace += lastAddedSpace;
+              if ($lastParent === $parentFVElement) {
+                $parentOwner = $child;
+              }
+            } else {
+              // Remove the height of the child which is the parent of this
+              parentSpace -= lastAddedSpace;
+              return false;
+            }
+          });
+          parentSpace += $lastParent.position().top;
+          $lastRef = $lastParent;
+          $lastParent = $lastParent.data('parentForeachVisible');
+        }
+        var position = Math.min($container.scrollTop() - parentSpace, $wrapper.height());
+
+        for (var i = 0; i < lastKnownHeights.length; i++) {
+          position -= lastKnownHeights[i];
+          if (position <= 0) {
+            startIndex = Math.max(i - elementIncrement, 0);
+            endIndex = Math.min(allEntries.length - 1, i + elementIncrement + visibleEntryCount);
+            break;
+          }
+        }
+      };
+
+      var renderThrottle = -1;
+      var lastScrollTop = -1;
+      var onScroll = function () {
+        if (startIndex > incrementLimit && Math.abs(lastScrollTop - $container.scrollTop()) < (incrementLimit * options.minHeight)) {
+          return;
+        }
+        lastScrollTop = $container.scrollTop();;
+        setStartAndEndFromScrollTop();
+        clearTimeout(renderThrottle);
+        if (Math.abs($parentFVOwnerElement.data('startIndex') - startIndex) > incrementLimit ||
+            Math.abs($parentFVOwnerElement.data('endIndex') - endIndex) > incrementLimit) {
+          renderThrottle = setTimeout(render, 0);
+        }
+      };
+
+      huePubSub.subscribe('foreach.visible.update', function (callerId) {
+        if (callerId === id && endIndex > 0) {
+          setStartAndEndFromScrollTop();
+          clearTimeout(renderThrottle);
+          renderThrottle = setTimeout(render, 0);
+        }
+      });
+
+      $container.bind('scroll', onScroll);
+
+      $parentFVOwnerElement.data('disposalFunction', function () {
+        setTimeout(function () {
+          huePubSub.publish('foreach.visible.update.heights', parentId);
+        }, 0);
+        $container.unbind('scroll', onScroll);
+        clearInterval(updateCountInterval);
+        clearInterval(updateHeightsInterval);
+        $parentFVOwnerElement.data('disposalFunction', null);
+      });
+
+      ko.utils.domNodeDisposal.addDisposeCallback($wrapper[0], function () {
+        $container.perfectScrollbar('destroy')
+      });
+      ko.utils.domNodeDisposal.addDisposeCallback($wrapper[0], $parentFVOwnerElement.data('disposalFunction'));
+
+      setStartAndEndFromScrollTop();
+      render();
+    }
+  };
+  ko.expressionRewriting.bindingRewriteValidators['foreachVisible'] = false;
+  ko.virtualElements.allowedBindings['foreachVisible'] = true;
+
+  ko.bindingHandlers.hueach = {
+    init: function (element, valueAccessor, allBindings) {
+      var valueAccessorBuilder = function () {
+        return {
+          data: ko.observableArray([])
+        }
+      }
+      ko.bindingHandlers.foreach.init(element, valueAccessorBuilder, allBindings);
+    },
+    update: function (element, valueAccessor, allBindings, viewModel, bindingContext) {
+      var $element = $(element),
+        $parent = $element.parent(),
+        data = typeof valueAccessor().data === 'function' ? valueAccessor().data() : valueAccessor().data,
+        considerStretching = valueAccessor().considerStretching || false,
+        itemHeight = valueAccessor().itemHeight || 22,
+        scrollable = valueAccessor().scrollable || 'body',
+        scrollableOffset = valueAccessor().scrollableOffset || 0,
+        disableHueEachRowCount = valueAccessor().disableHueEachRowCount || 0,
+        forceRenderSub = valueAccessor().forceRenderSub || null,
+        renderTimeout = -1,
+        dataHasChanged = true;
+
+      var wrappable = $(element);
+      if (data.length > disableHueEachRowCount) {
+        if ($parent.is('table')) {
+          wrappable = $parent;
+          $parent = wrappable.parent();
+        }
+
+        if (!wrappable.parent().hasClass('hueach')) {
+          wrappable.wrap('<div class="hueach"></div>');
+          $parent = wrappable.parent();
+          wrappable.css({
+            position: 'absolute',
+            width: '100%'
+          });
+        }
+
+        $parent.height(data.length * itemHeight);
+        if (wrappable.is('table')) {
+          $parent.height($parent.height() + (data.length > 0 ? itemHeight : 0));
+        }
+      }
+
+      try {
+        if (ko.utils.domData.get(element, 'originalData') && JSON.stringify(ko.utils.domData.get(element, 'originalData')) === JSON.stringify(data)) {
+          dataHasChanged = false;
+        }
+      }
+      catch (e) {
+      }
+
+      if (dataHasChanged) {
+        ko.utils.domData.set(element, 'originalData', data);
+      }
+
+      var startItem = 0, endItem = 0;
+      var valueAccessorBuilder = function () {
+        return {
+          data: ko.utils.domData.get(element, 'originalData') ? ko.observableArray(ko.utils.domData.get(element, 'originalData').slice(startItem, endItem)) : []
+        }
+      }
+
+      var render = function () {
+        if ($parent.parents('.hueach').length === 0) {
+          var heightCorrection = 0, fluidCorrection = 0;
+          var scrollTop = $parent.parents(scrollable).scrollTop();
+          if (wrappable.is('table')) {
+            if (scrollTop < scrollableOffset + itemHeight) {
+              wrappable.find('thead').css('opacity', '1');
+            }
+            else {
+              wrappable.find('thead').css('opacity', '0');
+            }
+          }
+          else {
+            wrappable.children(':visible').each(function (cnt, child) {
+              if ($(child).height() >= itemHeight) {
+                heightCorrection += $(child).height();
+              }
+            });
+            if (heightCorrection > 0) {
+              ko.utils.domData.set(element, 'heightCorrection', heightCorrection);
+            }
+            if (heightCorrection == 0 && ko.utils.domData.get(element, 'heightCorrection')) {
+              fluidCorrection = ko.utils.domData.get(element, 'heightCorrection') - 20;
+            }
+          }
+          startItem = Math.max(0, Math.floor(Math.max(1, (scrollTop - heightCorrection - fluidCorrection - scrollableOffset)) / itemHeight) - 10);
+          if (wrappable.is('table') && startItem % 2 == 1) {
+            startItem--;
+          }
+          endItem = Math.min(startItem + Math.ceil($parent.parents(scrollable).height() / itemHeight) + 20, data.length);
+          wrappable.css('top', ((startItem * itemHeight) + fluidCorrection) + 'px');
+        }
+        else {
+          startItem = 0, endItem = data.length;
+        }
+        bindingContext.$indexOffset = function () {
+          return startItem
+        }
+        ko.bindingHandlers.foreach.update(element, valueAccessorBuilder, allBindings, viewModel, bindingContext);
+      }
+
+
+      $parent.parents(scrollable).off('scroll');
+      $parent.parents(scrollable).on('scroll', render);
+
+      if ($parent.parents('.hueach').length > 0) {
+        window.setTimeout(render, 100);
+      }
+
+      if (considerStretching) {
+        huePubSub.subscribe('assist.stretchDown', function () {
+          window.clearTimeout(renderTimeout);
+          renderTimeout = window.setTimeout(function () {
+            ko.utils.domData.set(element, 'hasStretched', true);
+            render();
+          }, 300);
+        });
+      }
+
+      if (forceRenderSub) {
+        huePubSub.subscribe(forceRenderSub, function () {
+          window.setTimeout(render, 300);
+        });
+      }
+
+      window.clearTimeout(renderTimeout);
+      renderTimeout = window.setTimeout(function () {
+        ko.utils.domData.set(element, 'hasStretched', true);
+        render();
+      }, 300);
+
+    }
+  };
+
+  ko.bindingHandlers.floatlabel = {
+    init: function (element, valueAccessor, allBindings) {
+      $(element).floatlabel();
+    }
+  };
+
+  ko.bindingHandlers.perfectScrollbar = {
+    init: function (element, valueAccessor, allBindings) {
+      var options = valueAccessor() || {};
+      if (typeof options.enable === 'undefined' || options.enable) {
+        $(element).perfectScrollbar({
+          minScrollbarLength: options.minScrollbarLength || 20,
+          suppressScrollX: options.suppressScrollX || true
+        });
+        $(element).on('ps-scroll-x', function () {
+          $(element).trigger('scroll');
+        });
+        $(element).on('ps-scroll-y', function () {
+          $(element).trigger('scroll');
+        });
+      }
     }
   };
 

@@ -40,6 +40,8 @@ import desktop.conf
 import desktop.log.log_buffer
 
 from desktop.api import massaged_tags_for_json, massaged_documents_for_json, _get_docs
+from desktop.conf import USE_NEW_EDITOR
+from desktop.converters import DocumentConverter
 from desktop.lib import django_mako
 from desktop.lib.conf import GLOBAL_CONFIG, BoundConfig
 from desktop.lib.django_util import JsonResponse, login_notrequired, render_json, render
@@ -73,6 +75,12 @@ def home(request):
 
 
 def home2(request):
+  try:
+    converter = DocumentConverter(request.user)
+    converter.convert()
+  except Exception, e:
+    LOG.warning("Failed to convert and import documents: %s" % e)
+
   apps = appmanager.get_apps_dict(request.user)
 
   return render('home2.mako', request, {
@@ -96,7 +104,7 @@ def log_view(request):
     if isinstance(h, desktop.log.log_buffer.FixedBufferHandler):
       return render('logs.mako', request, dict(log=[l for l in h.buf], query=request.GET.get("q", "")))
 
-  return render('logs.mako', request, dict(log=[_("No logs found!")]))
+  return render('logs.mako', request, dict(log=[_("No logs found!")], query=''))
 
 @access_log_level(logging.WARN)
 def download_log_view(request):
@@ -290,7 +298,10 @@ def index(request):
   if request.user.is_superuser and request.COOKIES.get('hueLandingPage') != 'home':
     return redirect(reverse('about:index'))
   else:
-    return home(request)
+    if USE_NEW_EDITOR.get():
+      return home2(request)
+    else:
+      return home(request)
 
 def csrf_failure(request, reason=None):
   """Registered handler for CSRF."""
@@ -373,7 +384,7 @@ def commonheader(title, section, user, padding="90px", skip_topbar=False):
     for app in apps:
       if app.display_name not in [
           'beeswax', 'impala', 'pig', 'jobsub', 'jobbrowser', 'metastore', 'hbase', 'sqoop', 'oozie', 'filebrowser',
-          'useradmin', 'search', 'help', 'about', 'zookeeper', 'proxy', 'rdbms', 'spark', 'indexer', 'security', 'notebook']:
+          'useradmin', 'search', 'help', 'about', 'zookeeper', 'proxy', 'rdbms', 'spark', 'indexer', 'security', 'notebook'] and app.menu_index != -1:
         other_apps.append(app)
       if section == app.display_name:
         current_app = app

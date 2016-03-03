@@ -34,12 +34,14 @@
     var self = this;
     self.snippet = options.snippet;
     self.hdfsAutocompleter = options.hdfsAutocompleter;
+    self.oldEditor = options.oldEditor || false;
 
     // Speed up by caching the databases
     var initDatabases = function () {
       self.snippet.getAssistHelper().loadDatabases({
         sourceType: self.snippet.type(),
-        callback: $.noop
+        silenceErrors: true,
+        successCallback: $.noop
       });
     };
     self.snippet.type.subscribe(function() {
@@ -67,7 +69,7 @@
         if (ref.indexOf('.') > 0) {
           var refParts = ref.split('.');
 
-          if(self.snippet.getAssistHelper().lastKnownDatabases.indexOf(refParts[0]) > -1) {
+          if(self.snippet.getAssistHelper().lastKnownDatabases[self.snippet.type()].indexOf(refParts[0]) > -1) {
             return {
               database: refParts.shift(),
               table: refParts.join('.')
@@ -255,6 +257,7 @@
                 callback(tableAndComplexRefs);
               }
             },
+            silenceErrors: true,
             errorCallback: function () {
               callback(tableAndComplexRefs);
             }
@@ -295,10 +298,10 @@
           type: "table"
         }
       });
-      if (! excludeDatabases) {
+      if (! excludeDatabases && ! self.oldEditor) {
         // No FROM prefix
         prependedFields = prependedFields.concat(fields);
-        fields = $.map(self.snippet.getAssistHelper().lastKnownDatabases, function(database) {
+        fields = $.map(self.snippet.getAssistHelper().lastKnownDatabases[self.snippet.type()], function(database) {
           return {
             name: database + ".",
             type: "database"
@@ -368,7 +371,7 @@
     var impalaFieldRef = impalaSyntax && beforeCursor.slice(-1) === '.';
 
     if (keywordBeforeCursor === "USE") {
-      var databases = self.snippet.getAssistHelper().lastKnownDatabases;
+      var databases = self.snippet.getAssistHelper().lastKnownDatabases[self.snippet.type()];
       databases.sort();
       callback($.map(databases, function(db, idx) {
         return {
@@ -426,8 +429,13 @@
 
     if (tableNameAutoComplete || (selectBefore && !fromAfter)) {
       var dbRefMatch = beforeCursor.match(/.*from\s+([^\.\s]+).$/i);
-      if (dbRefMatch) {
+      var partialMatch = beforeCursor.match(/.*from\s+([\S]+)$/i);
+      var partialTableOrDb = null;
+      if (dbRefMatch && self.snippet.getAssistHelper().lastKnownDatabases[self.snippet.type()].indexOf(dbRefMatch[1]) > -1) {
         database = dbRefMatch[1];
+      } else if (dbRefMatch && partialMatch) {
+        partialTableOrDb = partialMatch[1].toLowerCase();
+        database = self.snippet.database();
       }
 
       self.snippet.getAssistHelper().fetchTables({
@@ -449,8 +457,16 @@
             }
             fromKeyword += " ";
           }
-          callback(self.extractFields(data, fromKeyword, false, [], dbRefMatch !== null));
+          var result = self.extractFields(data, fromKeyword, false, [], dbRefMatch !== null && partialTableOrDb === null);
+          if (partialTableOrDb !== null) {
+            callback($.grep(result, function (suggestion) {
+              return suggestion.value.indexOf(partialTableOrDb) === 0;
+            }))
+          } else {
+            callback(result);
+          }
         },
+        silenceErrors: true,
         errorCallback: onFailure,
         editor: editor
       });
@@ -561,6 +577,7 @@
                 callback(self.extractFields(data, "", !fieldTermBefore));
               }
             },
+            silenceErrors: true,
             errorCallback: onFailure
           });
           return; // break recursion
@@ -608,6 +625,7 @@
                     onFailure();
                   }
                 },
+                silenceErrors: true,
                 errorCallback: onFailure
               });
               return; // break recursion, it'll be async above
@@ -658,6 +676,7 @@
               fields: fields,
               editor: editor,
               successCallback: successCallback,
+              silenceErrors: true,
               errorCallback: onFailure
             });
             return; // break recursion, it'll be async above

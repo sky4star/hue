@@ -122,6 +122,9 @@
   # The copyright message for the specified Leaflet maps Tile Layer
   ## leaflet_tile_layer_attribution='&copy; <a href="http://osm.org/copyright">OpenStreetMap</a> contributors'
 
+  # X-Frame-Options HTTP header value. Use 'DENY' to deny framing completely                   
+  ## http_x_frame_options=SAMEORIGIN
+
   # Enable X-Forwarded-Host header if the load balancer requires it.
   ## use_x_forwarded_host=false
 
@@ -212,12 +215,16 @@
   [[custom]]
 
     # Top banner HTML code
-    # e.g. <H2>Test Lab A2 Hue Services</H2>
+    # e.g. <H4>Test Lab A2 Hue Services</H4>
     ## banner_top_html=
 
     # Login splash HTML code
     # e.g. WARNING: You are required to have authorization before you proceed
     ## login_splash_html=
+
+    # Cache timeout in milliseconds for the assist, autocomplete, etc.
+    # defaults to 86400000 (1 day), set to 0 to disable caching
+    ## cacheable_ttl=86400000
 
   # Configuration options for user authentication into the web application
   # ------------------------------------------------------------------------
@@ -257,11 +264,11 @@
     ## remote_user_header=HTTP_REMOTE_USER
 
     # Ignore the case of usernames when searching for existing users.
-    # Only supported in remoteUserDjangoBackend.
+    # Supported in remoteUserDjangoBackend and SpnegoDjangoBackend
     ## ignore_username_case=true
 
     # Ignore the case of usernames when searching for existing users to authenticate with.
-    # Only supported in remoteUserDjangoBackend.
+    # Supported in remoteUserDjangoBackend and SpnegoDjangoBackend
     ## force_username_lowercase=true
 
     # Users will expire after they have not logged in for 'n' amount of seconds.
@@ -270,6 +277,10 @@
 
     # Apply 'expires_after' to superusers.
     ## expire_superusers=true
+
+    # Users will automatically be logged out after 'n' seconds of inactivity.
+    # A negative number means that idle sessions will not be timed out.
+    idle_session_timeout=-1
 
     # Force users to change password on first login with desktop.auth.backend.AllowFirstUserDjangoBackend
     ## change_default_password=false
@@ -580,6 +591,10 @@
       name=Impala
       interface=hiveserver2
 
+    # [[[sparksql]]]
+    #   name=SparkSql
+    #   interface=hiveserver2
+
     [[[spark]]]
       name=Scala
       interface=livy
@@ -612,9 +627,21 @@
       name=Markdown
       interface=text
 
-    # [[[sparksql]]]
-    #   name=SparkSql
-    #   interface=hiveserver2
+    [[[mysql]]]
+      name = MySQL
+      interface=rdbms
+
+    [[[sqlite]]]
+      name = SQLite
+      interface=rdbms
+
+    [[[postgresql]]]
+      name = PostgreSQL
+      interface=rdbms
+
+    [[[oracle]]]
+      name = Oracle
+      interface=rdbms
 
     # [[[mysql]]]
     #   name=MySql JDBC
@@ -771,7 +798,7 @@
 
   # A limit to the number of rows that can be downloaded from a query.
   # A value of -1 means there will be no limit.
-  # A maximum of 65,000 is applied to XLS downloads.
+  # A maximum of 30,000 is applied to XLS downloads.
   ## download_row_limit=1000000
 
   # Hue will try to close the Hive query when the user leaves the editor page.
@@ -781,6 +808,9 @@
   # Thrift version to use when communicating with HiveServer2.
   # New column format is from version 7.
   ## thrift_version=7
+
+  # A comma-separated list of white-listed Hive configuration properties that users are authorized to set.
+  # config_whitelist=hive.map.aggr,hive.exec.compress.output,hive.exec.parallel,hive.execution.engine,mapreduce.job.queuename
 
   [[ssl]]
     # Path to Certificate Authority certificates.
@@ -793,6 +823,9 @@
   # e.g. Used for LDAP/PAM pass-through authentication.
   ## auth_username=hue
   ## auth_password=
+
+  # Choose whether to show the new SQL editor.
+  ## use_new_editor=true
 
 
 ###########################################################################
@@ -1042,8 +1075,14 @@
 
 [security]
 
-  # Use Sentry generic API V2 for Hive and Solr.
-  ## latest=false
+  # Use Sentry API V1 for Hive.
+  ## hive_v1=true
+
+  # Use Sentry API V2 for Hive.
+  ## hive_v2=false
+
+  # Use Sentry API V2 for Solr.
+  ## solr_v2=false
 
 
 ###########################################################################
@@ -1245,6 +1284,12 @@
   # Signed certificate to send along with encrypted metadata.
   ## cert_file=
 
+  # Path to a file containing the password private key.
+  ## key_file_password=/path/key
+
+  # Execute this script to produce the private key password. This will be used when `key_file_password` is not set.
+  ## key_file_password_script=/path/pwd.sh
+
   # A mapping from attributes in the response from the IdP to django user attributes.
   ## user_attribute_mapping={'uid': ('username', )}
 
@@ -1349,12 +1394,34 @@
 [metadata]
   # For metadata tagging and enrichment features
 
-  [[navigator]]
-  # Navigator API URL with version
-  ## api_url=http://jennykim-1.vpc.cloudera.com:7187/api/v2
+  [[optimizer]]
+    # For SQL query and table analysis
+    # Base URL to Optimizer API.
+    ## api_url=https://alpha.optimizer.cloudera.com
+    # The name of the product or group which will have API access to the emails associated with it.
+    ## product_name=hue
+    # A secret passphrase associated with the productName
+    ## product_secret=hue
+    # Execute this script to produce the product secret. This will be used when `product_secret` is not set.
+    ## product_secret_script=
 
-  # Navigator API HTTP authentication username and password
-  # Override the desktop default username and password of the hue user used for authentications with other services.
-  # e.g. Used for LDAP/PAM pass-through authentication.
-  ## auth_username=hue
-  ## auth_password=
+    # The email of the Optimizer account you want to associate with the Product.
+    ## email=hue@gethue.com
+    # The password associated with the Optimizer account you to associate with the Product.
+    ## email_password=hue
+    # Execute this script to produce the email password. This will be used when `email_password` is not set.
+    ## password_script=
+
+    # In secure mode (HTTPS), if Optimizer SSL certificates have to be verified against certificate authority.
+    ## ssl_cert_ca_verify=True
+
+  [[navigator]]
+    # For tagging tables, files and getting lineage of data.
+    # Navigator API URL with version
+    ## api_url=http://localhost:7187/api/v2
+
+    # Navigator API HTTP authentication username and password
+    # Override the desktop default username and password of the hue user used for authentications with other services.
+    # e.g. Used for LDAP/PAM pass-through authentication.
+    ## auth_username=hue
+    ## auth_password=

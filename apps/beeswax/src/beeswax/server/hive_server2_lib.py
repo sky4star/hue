@@ -39,7 +39,7 @@ from TCLIService.ttypes import TOpenSessionReq, TGetTablesReq, TFetchResultsReq,
 from beeswax import conf as beeswax_conf
 from beeswax import hive_site
 from beeswax.hive_site import hiveserver2_use_ssl
-from beeswax.conf import LIST_PARTITIONS_LIMIT
+from beeswax.conf import CONFIG_WHITELIST, LIST_PARTITIONS_LIMIT
 from beeswax.models import Session, HiveServerQueryHandle, HiveServerQueryHistory
 from beeswax.server.dbms import Table, NoSuchObjectException, DataTable,\
                                 QueryServerException
@@ -604,8 +604,8 @@ class HiveServerClient:
                                      properties=properties)
 
     # HS2 does not return properties in TOpenSessionResp
-    if self.query_server['server_name'] == "beeswax" and not session.get_properties():
-      session.properties = json.dumps(self.get_configuration(include_hadoop=False))
+    if not session.get_properties():
+      session.properties = json.dumps(self.get_configuration())
       session.save()
 
     return session
@@ -649,9 +649,14 @@ class HiveServerClient:
     return self._client.CloseSession(req)
 
 
-  def get_databases(self):
+  def get_databases(self, schemaName=None):
     # GetCatalogs() is not implemented in HS2
     req = TGetSchemasReq()
+    if schemaName is not None:
+      req.schemaName = schemaName
+    if self.query_server['server_name'] == 'impala':
+      req.schemaName = None
+
     res = self.call(self._client.GetSchemas, req)
 
     results, schema = self.fetch_result(res.operationHandle, orientation=TFetchOrientation.FETCH_NEXT, max_rows=5000)
@@ -874,16 +879,20 @@ class HiveServerClient:
     return partitions[:max_parts]
 
 
-  def get_configuration(self, include_hadoop=False):
+  def get_configuration(self):
     configuration = {}
-    query = 'SET'
-    if include_hadoop:
-      query += ' -v'
 
-    results = self.execute_query_statement(query)
-    if results:
-      rows = [row[0] for row in results.rows()]
-      configuration = dict((row.split('=')[0], row.split('=')[1]) for row in rows if '=' in row)
+    if self.query_server['server_name'] == 'impala':  # Return all configuration settings
+      query = 'SET'
+      results = self.execute_query_statement(query, orientation=TFetchOrientation.FETCH_NEXT)
+      configuration = dict((row[0], row[1]) for row in results.rows())
+    else:  # For Hive, only return white-listed configurations
+      query = 'SET -v'
+      results = self.execute_query_statement(query, orientation=TFetchOrientation.FETCH_FIRST)
+      config_whitelist = [config.lower() for config in CONFIG_WHITELIST.get()]
+      properties = [(row[0].split('=')[0], row[0].split('=')[1]) for row in results.rows() if '=' in row[0]]
+      configuration = dict((prop, value) for prop, value in properties if prop.lower() in config_whitelist)
+
     return configuration
 
 
@@ -1065,9 +1074,9 @@ class HiveServerClientCompatible(object):
       return self._client.fetch_log(operationHandle, orientation=orientation, max_rows=-1)
 
 
-  def get_databases(self):
+  def get_databases(self, schemaName=None):
     col = 'TABLE_SCHEM'
-    return [table[col] for table in self._client.get_databases()]
+    return [table[col] for table in self._client.get_databases(schemaName)]
 
 
   def get_database(self, database):
@@ -1102,7 +1111,7 @@ class HiveServerClientCompatible(object):
 
 
   def get_default_configuration(self, *args, **kwargs):
-    return {}
+    return []
 
 
   def get_results_metadata(self, handle):
@@ -1131,3 +1140,6 @@ class HiveServerClientCompatible(object):
 
 
   def alter_partition(self, db_name, tbl_name, new_part): raise NotImplementedError()
+
+  def get_configuration(self):
+    return self._client.get_configuration()

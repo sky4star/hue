@@ -24,10 +24,11 @@ import time
 from django.utils.translation import ugettext as _
 
 from desktop.lib.exceptions_renderable import PopupException
-from libsentry.client2 import SentryClient
+from libzookeeper.models import ZookeeperClient
+
+from libsentry.client import SentryClient
 from libsentry.conf import HOSTNAME, PORT
 from libsentry.sentry_site import get_sentry_server_ha_enabled, get_sentry_server_ha_zookeeper_quorum, get_sentry_server_ha_zookeeper_namespace
-from libzookeeper.models import ZookeeperClient
 
 
 LOG = logging.getLogger(__name__)
@@ -147,7 +148,7 @@ class SentryApi(object):
     response = self.client.list_sentry_privileges_by_role(roleName, authorizableHierarchy)
 
     if response.status.value == 0:
-      return [self._massage_priviledge(privilege) for privilege in response.privileges]
+      return [self._massage_privilege(privilege) for privilege in response.privileges]
     else:
       raise SentryException(response)
 
@@ -172,7 +173,7 @@ class SentryApi(object):
     for authorizable, roles in response.privilegesMapByAuth.iteritems():
       _roles = {}
       for role, privileges in roles.privilegeMap.iteritems():
-        _roles[role] = [self._massage_priviledge(privilege) for privilege in privileges]
+        _roles[role] = [self._massage_privilege(privilege) for privilege in privileges]
       _privileges.append((self._massage_authorizable(authorizable), _roles))
 
     return _privileges
@@ -196,7 +197,7 @@ class SentryApi(object):
       raise SentryException(response)
 
 
-  def _massage_priviledge(self, privilege):
+  def _massage_privilege(self, privilege):
     return {
         'scope': privilege.privilegeScope,
         'server': privilege.serverName,

@@ -93,8 +93,8 @@ class SentryApi(object):
       raise SentryException(response)
 
   @ha_error_handler
-  def alter_sentry_role_grant_privilege(self, roleName, tSentryPrivilege=None, tSentryPrivileges=None):
-    response = self.client.alter_sentry_role_grant_privilege(roleName, tSentryPrivilege, tSentryPrivileges)
+  def alter_sentry_role_grant_privilege(self, roleName, tSentryPrivilege=None):
+    response = self.client.alter_sentry_role_grant_privilege(roleName, tSentryPrivilege)
 
     if response.status.value == 0:
       return response
@@ -102,8 +102,8 @@ class SentryApi(object):
       raise SentryException(response)
 
   @ha_error_handler
-  def alter_sentry_role_revoke_privilege(self, roleName, tSentryPrivilege=None, tSentryPrivileges=None):
-    response = self.client.alter_sentry_role_revoke_privilege(roleName, tSentryPrivilege, tSentryPrivileges)
+  def alter_sentry_role_revoke_privilege(self, roleName, tSentryPrivilege=None):
+    response = self.client.alter_sentry_role_revoke_privilege(roleName, tSentryPrivilege)
 
     if response.status.value == 0:
       return response
@@ -148,7 +148,7 @@ class SentryApi(object):
     response = self.client.list_sentry_privileges_by_role(serviceName, roleName, authorizables)
 
     if response.status.value == 0:
-      return [self._massage_priviledge(privilege) for privilege in response.privileges]
+      return [self._massage_privilege(privilege) for privilege in response.privileges]
     else:
       raise SentryException(response)
 
@@ -173,7 +173,7 @@ class SentryApi(object):
     for authorizable, roles in response.privilegesMapByAuth.iteritems():
       _roles = {}
       for role, privileges in roles.privilegeMap.iteritems():
-        _roles[role] = [self._massage_priviledge(privilege) for privilege in privileges]
+        _roles[role] = [self._massage_privilege(privilege) for privilege in privileges]
       _privileges.append((self._massage_authorizable(authorizable), _roles))
 
     return _privileges
@@ -197,28 +197,20 @@ class SentryApi(object):
       raise SentryException(response)
 
 
-  def _massage_priviledge(self, privilege):
+  def _massage_privilege(self, privilege):
     return {
-        'scope': privilege.privilegeScope,
-        'server': privilege.serverName,
-        'database': privilege.dbName,
-        'table': privilege.tableName,
-        'URI': privilege.URI,
+        'component': privilege.component,
+        'serviceName': privilege.serviceName,
+        'authorizables': self._massage_authorizable(privilege.authorizables),
         'action': 'ALL' if privilege.action == '*' else privilege.action.upper(),
         'timestamp': privilege.createTime,
+        'grantorPrincipal': privilege.grantorPrincipal,
         'grantOption': privilege.grantOption == 1,
-        'column': privilege.columnName,
     }
 
 
-  def _massage_authorizable(self, authorizable):
-    return {
-        'server': authorizable.server,
-        'database': authorizable.db,
-        'table': authorizable.table,
-        'URI': authorizable.uri,
-        'column': authorizable.column,
-    }
+  def _massage_authorizable(self, authorizables):
+    return [{'type': auth.type, 'name': auth.name} for auth in authorizables]
 
 
 class SentryException(Exception):

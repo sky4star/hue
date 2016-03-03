@@ -27,14 +27,13 @@ import sys
 
 from guppy import hpy
 
+from django.utils.translation import ugettext_lazy as _
 
 import desktop.conf
 import desktop.log
 import desktop.redaction
-
 from desktop.lib.paths import get_desktop_root
 from desktop.lib.python_util import force_dict_to_strings
-from django.utils.translation import ugettext_lazy as _
 
 
 # Build paths inside the project like this: os.path.join(BASE_DIR, ...)
@@ -80,6 +79,18 @@ desktop.log.fancy_logging()
 # Language code for this installation. All choices can be found here:
 # http://www.i18nguy.com/unicode/language-identifiers.html
 LANGUAGE_CODE = 'en-us'
+
+LANGUAGES = [
+  ('de', _('German')),
+  ('en-us', _('English')),
+  ('es', _('Spanish')),
+  ('fr', _('French')),
+  ('ja', _('Japanese')),
+  ('ko', _('Korean')),
+  ('pt', _('Portuguese')),
+  ('pt_BR', _('Brazilian Portuguese')),
+  ('zh_CN', _('Simplified Chinese')),
+]
 
 SITE_ID = 1
 
@@ -151,9 +162,9 @@ MIDDLEWARE_CLASSES = [
     'axes.middleware.FailedLoginMiddleware',
 ]
 
-if os.environ.get(ENV_DESKTOP_DEBUG):
-  MIDDLEWARE_CLASSES.append('desktop.middleware.HtmlValidationMiddleware')
-  logging.debug("Will try to validate generated HTML.")
+# if os.environ.get(ENV_DESKTOP_DEBUG):
+#   MIDDLEWARE_CLASSES.append('desktop.middleware.HtmlValidationMiddleware')
+#   logging.debug("Will try to validate generated HTML.")
 
 ROOT_URLCONF = 'desktop.urls'
 
@@ -265,6 +276,10 @@ conf.initialize(_app_conf_modules, _config_dir)
 # Now that we've loaded the desktop conf, set the django DEBUG mode based on the conf.
 DEBUG = desktop.conf.DJANGO_DEBUG_MODE.get()
 TEMPLATE_DEBUG = DEBUG
+if DEBUG: # For simplification, force all DEBUG when django_debug_mode is True and re-apply the loggers
+  os.environ[ENV_DESKTOP_DEBUG] = 'True'
+  desktop.log.basic_logging(os.environ[ENV_HUE_PROCESS_NAME])
+  desktop.log.fancy_logging()
 
 ############################################################
 # Part 4a: Django configuration that requires bound Desktop
@@ -273,6 +288,8 @@ TEMPLATE_DEBUG = DEBUG
 
 # Configure allowed hosts
 ALLOWED_HOSTS = desktop.conf.ALLOWED_HOSTS.get()
+
+X_FRAME_OPTIONS = desktop.conf.X_FRAME_OPTIONS.get()
 
 # Configure hue admins
 ADMINS = []
@@ -296,6 +313,7 @@ if os.getenv('DESKTOP_DB_CONFIG'):
   default_db = dict(zip(
     ["ENGINE", "NAME", "TEST_NAME", "USER", "PASSWORD", "HOST", "PORT"],
     conn_string.split(':')))
+  default_db['NAME'] = default_db['NAME'].replace('#', ':') # For is_db_alive command
 else:
   test_name = os.environ.get('DESKTOP_DB_TEST_NAME', get_desktop_root('desktop-test.db'))
   logging.debug("DESKTOP_DB_TEST_NAME SET: %s" % test_name)
@@ -417,9 +435,9 @@ USE_X_FORWARDED_HOST = desktop.conf.USE_X_FORWARDED_HOST.get()
 if desktop.conf.SECURE_PROXY_SSL_HEADER.get():
   SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTOCOL', 'https')
 
-# Add last activity tracking.
+# Add last activity tracking and idle session timeout
 if 'useradmin' in [app.name for app in appmanager.DESKTOP_APPS]:
-  MIDDLEWARE_CLASSES.append('useradmin.middleware.UpdateLastActivityMiddleware')
+  MIDDLEWARE_CLASSES.append('useradmin.middleware.LastActivityMiddleware')
 
 ############################################################
 

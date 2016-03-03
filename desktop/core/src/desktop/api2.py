@@ -18,23 +18,22 @@
 import logging
 import json
 import tempfile
-import time
 import StringIO
 import zipfile
 
 from django.contrib.auth.models import Group, User
 from django.core import management
+
 from django.http import HttpResponse
 from django.shortcuts import redirect
-from django.utils import html
+from django.utils.translation import ugettext as _
 from django.views.decorators.http import require_POST
 
 from desktop.lib.django_util import JsonResponse
+from desktop.lib.exceptions_renderable import PopupException
 from desktop.lib.export_csvxls import make_response
 from desktop.lib.i18n import smart_str, force_unicode
-from desktop.models import Document2, Document, Directory
-from desktop.lib.exceptions_renderable import PopupException
-from hadoop.fs.hadoopfs import Hdfs
+from desktop.models import Document2, Document, Directory, DocumentTag, FilesystemException
 
 
 LOG = logging.getLogger(__name__)
@@ -58,119 +57,197 @@ def api_error_handler(func):
 
 
 @api_error_handler
-def get_documents(request): # TODO only here for assist
-  filters = {
-      'owner': request.user
+def search_documents(request):
+  """
+  Returns the directories and documents based on given params that are accessible by the current user
+  Optional params:
+    perms=<mode>       - Controls whether to retrieve owned, shared, or both. Defaults to both.
+    include_history=<bool> - Controls whether to retrieve history docs. Defaults to false.
+    flatten=<bool>     - Controls whether to return documents in a flat list, or roll up documents to a common directory
+                         if possible. Defaults to true.
+    page=<n>           - Controls pagination. Defaults to 1.
+    limit=<n>          - Controls limit per page. Defaults to all.
+    type=<type>        - Show documents of given type(s) (directory, query-hive, query-impala, query-mysql, etc).
+                         Defaults to all.
+    sort=<key>         - Sort by the attribute <key>, which is one of: "name", "type", "owner", "last_modified"
+                         Accepts the form "-last_modified", which sorts in descending order.
+                         Defaults to "-last_modified".
+    text=<frag>       -  Search for fragment "frag" in names and descriptions.
+  """
+
+  response = {
+    'documents': []
   }
 
-  if request.GET.get('type'):
-    filters['type'] = json.loads(request.GET.get('type'))
+  perms = request.GET.get('perms', 'both').lower()
+  include_history = json.loads(request.GET.get('include_history', 'false'))
+  flatten = json.loads(request.GET.get('flatten', 'true'))
 
-  return JsonResponse({'documents': [doc.to_dict() for doc in Document2.objects.filter(**filters)]})
+  if perms not in ['owned', 'shared', 'both']:
+    raise PopupException(_('Invalid value for perms, acceptable values are: owned, shared, both.'))
 
+  documents = Document2.objects.documents(user=request.user, perms=perms, include_history=include_history)
 
-@api_error_handler
-def get_documents2(request):
-  path = request.GET.get('path', '/') # Expects path to be a Directory for now
+  # Refine results
+  response.update(_filter_documents(request, queryset=documents, flatten=flatten))
 
-  try:
-    file_doc = Directory.objects.get(owner=request.user, name=path) # TODO perms
-  except Directory.DoesNotExist, e:
-    if path == '/':
-      file_doc = Directory.objects.create(name='/', type='directory', owner=request.user)
-      file_doc.dependencies.add(*Document2.objects.filter(owner=request.user).exclude(id=file_doc.id))
-    else:
-      raise e
+  # Paginate
+  response.update(_paginate(request, queryset=response['documents']))
 
-  return JsonResponse({
-      'file': file_doc.to_dict(),
-      'documents': [doc.to_dict() for doc in file_doc.documents()],
-      'path': path
-  })
+  # Serialize results
+  response['documents'] = [doc.to_dict() for doc in response.get('documents', [])]
+
+  return JsonResponse(response)
 
 
 @api_error_handler
 def get_document(request):
-  if request.GET.get('id'):
-    doc = Document2.objects.get(id=request.GET['id'])
-  else:
-    doc = Document2.objects.get(uuid=request.GET['uuid'])
-
-  permissions = _massage_permissions(doc)
-
-  doc_info = doc.to_dict()
-  doc_info.update(permissions)
-
-  return JsonResponse(doc_info)
-
-
-def _massage_permissions(document):
   """
-  Returns the permissions for a given document as a dictionary
+  Returns the document or directory found for the given uuid or path and current user.
+  If a directory is found, return any children documents too.
+  Optional params:
+    page=<n>    - Controls pagination. Defaults to 1.
+    limit=<n>   - Controls limit per page. Defaults to all.
+    type=<type> - Show documents of given type(s) (directory, query-hive, query-impala, query-mysql, etc). Default to all.
+    sort=<key>  - Sort by the attribute <key>, which is one of:
+                    "name", "type", "owner", "last_modified"
+                  Accepts the form "-last_modified", which sorts in descending order.
+                  Default to "-last_modified".
+    text=<frag> - Search for fragment "frag" in names and descriptions.
   """
-  read_perms = document.list_permissions(perm='read')
-  write_perms = document.list_permissions(perm='write')
-  return {
-    'perms': {
-        'read': {
-          'users': [{'id': perm_user.id, 'username': perm_user.username} \
-                     for perm_user in read_perms.users.all()],
-          'groups': [{'id': perm_group.id, 'name': perm_group.name} \
-                     for perm_group in read_perms.groups.all()]
-        },
-        'write': {
-          'users': [{'id': perm_user.id, 'username': perm_user.username} \
-                     for perm_user in write_perms.users.all()],
-          'groups': [{'id': perm_group.id, 'name': perm_group.name} \
-                     for perm_group in write_perms.groups.all()]
-        }
-      }
-    }
+  path = request.GET.get('path', '/')
+  uuid = request.GET.get('uuid')
+
+  if uuid:
+    document = Document2.objects.get_by_uuid(uuid)
+  else:  # Find by path
+    document = Document2.objects.get_by_path(user=request.user, path=path)
+
+  # Check if user has read permissions
+  document.can_read_or_exception(request.user)
+
+  response = {
+    'document': document.to_dict(),
+    'parent': document.parent_directory.to_dict() if document.parent_directory else None,
+    'children': []
+  }
+
+  # Get children documents if this is a directory
+  if document.is_directory:
+    directory = Directory.objects.get(id=document.id)
+    children = directory.get_children_documents()
+    # Filter and order results
+    response.update(_filter_documents(request, queryset=children))
+
+  # Paginate and serialize Results
+  if 'documents' in response:
+    response.update(_paginate(request, queryset=response['documents']))
+    # Rename documents to children
+    response['children'] = response.pop('documents')
+    response['children'] = [doc.to_dict() for doc in response['children']]
+
+  return JsonResponse(response)
+
 
 @api_error_handler
 @require_POST
 def move_document(request):
-  source_id = request.POST.get('source_id', 'source_id')
-  destination_id = request.POST.get('destination_id', 'destination_id')
+  source_doc_uuid = json.loads(request.POST.get('source_doc_uuid'))
+  destination_doc_uuid = json.loads(request.POST.get('destination_doc_uuid'))
 
-  # destination exists + is dir?
-  source = Document2.objects.document(request.user, uuid=source_id)
-  destination = Directory.objects.document(request.user, uuid=destination_id)
+  if not source_doc_uuid or not destination_doc_uuid:
+    raise PopupException(_('move_document requires source_doc_uuid and destination_doc_uuid'))
 
-  source.move(destination)
+  source = Document2.objects.get_by_uuid(uuid=source_doc_uuid)
+  destination = Directory.objects.get_by_uuid(uuid=destination_doc_uuid)
 
-  return JsonResponse({'status': 0})
+  # Check if user has write permissions for both source and destination
+  source.can_write_or_exception(request.user)
+  destination.can_write_or_exception(request.user)
+
+  doc = source.move(destination, request.user)
+
+  return JsonResponse({
+    'status': 0,
+    'document': doc.to_dict()
+  })
 
 
 @api_error_handler
 @require_POST
 def create_directory(request):
-  parent_path = json.loads(request.POST.get('parent_path'))
+  parent_uuid = json.loads(request.POST.get('parent_uuid'))
   name = json.loads(request.POST.get('name'))
 
-  parent_dir = Directory.objects.get(owner=request.user, name=parent_path)
+  if not parent_uuid or not name:
+    raise PopupException(_('create_directory requires parent_uuid and name'))
 
-  path = Hdfs.normpath(parent_path + '/' + name)
-  file_doc = Directory.objects.create(name=path, type='directory', owner=request.user)
-  parent_dir.dependencies.add(file_doc)
+  parent_dir = Directory.objects.get_by_uuid(uuid=parent_uuid)
+
+  # Check if user has write permissions for parent directory
+  parent_dir.can_write_or_exception(request.user)
+
+  directory = Directory.objects.create(name=name, owner=request.user, parent_directory=parent_dir)
 
   return JsonResponse({
       'status': 0,
-      'file': file_doc.to_dict()
+      'directory': directory.to_dict()
   })
 
 
 @api_error_handler
 @require_POST
+def update_document(request):
+  uuid = json.loads(request.POST.get('uuid'))
+
+  if not uuid:
+    raise PopupException(_('update_document requires uuid'))
+
+  document = Document2.objects.get_by_uuid(uuid=uuid)
+  document.can_write_or_exception(request.user)
+
+  whitelisted_attrs = ['name', 'description']
+
+  for attr in whitelisted_attrs:
+    if request.POST.get(attr):
+      setattr(document, attr, request.POST.get(attr))
+
+  document.save(update_fields=whitelisted_attrs)
+
+  return JsonResponse({
+    'status': 0,
+    'document': document.to_dict()
+  })
+
+
+
+@api_error_handler
+@require_POST
 def delete_document(request):
-  document_id = json.loads(request.POST.get('doc_id'))
-  skip_trash = json.loads(request.POST.get('skip_trash', 'false')) # TODO always false currently
+  """
+  Accepts a uuid and optional skip_trash parameter
 
-  document = Document2.objects.document(request.user, doc_id=document_id)
-  if document.type == 'directory' and document.dependencies().count() > 1:
-    raise PopupException(_('Directory is not empty'))
+  (Default) skip_trash=false, flags a document as trashed
+  skip_trash=true, deletes it permanently along with any history dependencies
 
-  document.delete()
+  If directory and skip_trash=false, all dependencies will also be flagged as trash
+  If directory and skip_trash=true, directory must be empty (no dependencies)
+  """
+  uuid = json.loads(request.POST.get('uuid'))
+  skip_trash = json.loads(request.POST.get('skip_trash', 'false'))
+
+  if not uuid:
+    raise PopupException(_('delete_document requires uuid'))
+
+  document = Document2.objects.get_by_uuid(uuid=uuid)
+
+  # Check if user has write permissions for given document
+  document.can_write_or_exception(request.user)
+
+  if skip_trash:
+    document.delete()
+  else:
+    document.trash()
 
   return JsonResponse({
       'status': 0,
@@ -185,10 +262,13 @@ def share_document(request):
 
   Example of input: {'read': {'user_ids': [1, 2, 3], 'group_ids': [1, 2, 3]}}
   """
-  perms_dict = json.loads(request.POST['data'])
-  doc_id = json.loads(request.POST['doc_id'])
+  perms_dict = json.loads(request.POST.get('data'))
+  uuid = json.loads(request.POST.get('uuid'))
 
-  doc = Document2.objects.document(request.user, doc_id)
+  if not uuid or not perms_dict:
+    raise PopupException(_('share_document requires uuid and perms_dict'))
+
+  doc = Document2.objects.get_by_uuid(uuid=uuid)
 
   for name, perm in perms_dict.iteritems():
     users = groups = None
@@ -202,38 +282,12 @@ def share_document(request):
     else:
       groups = []
 
-    doc.share(request.user, name=name, users=users, groups=groups)
+    doc = doc.share(request.user, name=name, users=users, groups=groups)
 
   return JsonResponse({
-      'status': 0,
+    'status': 0,
+    'document': doc.to_dict()
   })
-
-
-def _massage_doc_for_json(document, user, with_data=False):
-
-  massaged_doc = {
-    'id': document.id,
-    'uuid': document.uuid,
-
-    'owner': document.owner.username,
-    'type': html.conditional_escape(document.type),
-    'name': html.conditional_escape(document.name),
-    'description': html.conditional_escape(document.description),
-
-    'isMine': document.owner == user,
-    'lastModified': document.last_modified.strftime("%x %X"),
-    'lastModifiedInMillis': time.mktime(document.last_modified.timetuple()),
-    'version': document.version,
-    'is_history': document.is_history,
-
-    # tags
-    # dependencies
-  }
-
-  if with_data:
-    massaged_doc['data'] = document.data_dict
-
-  return massaged_doc
 
 
 def export_documents(request):
@@ -266,7 +320,6 @@ def export_documents(request):
           from spark.models import Notebook
           zfile.writestr("notebook-%s-%s.txt" % (doc.name, doc.id), smart_str(Notebook(document=doc).get_str()))
         except Exception, e:
-          print e
           LOG.exception(e)
     zfile.close()
     response = HttpResponse(content_type="application/zip")
@@ -276,7 +329,6 @@ def export_documents(request):
     return response
   else:
     return make_response(f.getvalue(), 'json', 'hue-documents')
-
 
 
 def import_documents(request):
@@ -293,8 +345,7 @@ def import_documents(request):
       doc['fields']['owner'] = [request.user.username]
     owner = doc['fields']['owner'][0]
 
-    doc['fields']['tags'] = []
-
+    # TODO: Check if this should be replaced by get_by_uuid
     if Document2.objects.filter(uuid=doc['fields']['uuid'], owner__username=owner).exists():
       doc['pk'] = Document2.objects.get(uuid=doc['fields']['uuid'], owner__username=owner).pk
     else:
@@ -318,3 +369,58 @@ def import_documents(request):
     return redirect(request.POST.get('redirect'))
   else:
     return JsonResponse({'message': stdout.getvalue()})
+
+
+def _filter_documents(request, queryset, flatten=True):
+  """
+  Given optional querystring params extracted from the request, filter the given queryset of documents and return a
+    dictionary with the refined queryset and filter params
+  :param request: request object with params
+  :param queryset: Document2 queryset
+  :param flatten: Return all results in a flat list if true, otherwise roll up to common directory
+  """
+  type_filters = request.GET.getlist('type', None)
+  sort = request.GET.get('sort', '-last_modified')
+  search_text = request.GET.get('text', None)
+
+  documents = Document2.objects.refine_documents(
+      documents=queryset,
+      types=type_filters,
+      search_text=search_text,
+      order_by=sort)
+
+  # Roll up documents to common directory
+  if not flatten:
+    documents = documents.exclude(parent_directory__in=documents)
+
+  count = documents.count()
+
+  return {
+    'documents': documents,
+    'count': count,
+    'types': type_filters,
+    'text': search_text,
+    'sort': sort
+  }
+
+
+def _paginate(request, queryset):
+  """
+  Given optional querystring params extracted from the request, slice the given queryset of documents for the given page
+    and limit, and return the updated queryset along with pagination params used.
+  :param request: request object with params
+  :param queryset: queryset
+  """
+  page = int(request.GET.get('page', 1))
+  limit = int(request.GET.get('limit', 0))
+
+  if limit > 0:
+    offset = (page - 1) * limit
+    last = offset + limit
+    queryset = queryset.all()[offset:last]
+
+  return {
+    'documents': queryset,
+    'page': page,
+    'limit': limit
+  }

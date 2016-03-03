@@ -252,6 +252,13 @@ class TestImpalaIntegration:
           pass
 
 
+  def test_get_settings(self):
+    resp = self.client.get(reverse("impala:get_settings"))
+    json_resp = json.loads(resp.content)
+    assert_equal(0, json_resp['status'])
+    assert_true('QUERY_TIMEOUT_S' in json_resp['settings'])
+
+
   def test_invalidate_tables(self):
     # Helper function to get Impala and Beeswax (HMS) tables
     def get_impala_beeswax_tables():
@@ -375,7 +382,7 @@ def create_saved_query(app_name, owner):
 
 def test_ssl_cacerts():
   for desktop_kwargs, conf_kwargs, expected in [
-      ({'present': False}, {'present': False}, '/etc/hue/cacerts.pem'),
+      ({'present': False}, {'present': False}, ''),
       ({'present': False}, {'data': 'local-cacerts.pem'}, 'local-cacerts.pem'),
 
       ({'data': 'global-cacerts.pem'}, {'present': False}, 'global-cacerts.pem'),

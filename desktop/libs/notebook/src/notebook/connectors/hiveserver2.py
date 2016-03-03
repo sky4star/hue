@@ -19,6 +19,7 @@ import logging
 import re
 
 from django.core.urlresolvers import reverse
+from django.utils.translation import ugettext as _
 
 from desktop.lib.exceptions_renderable import PopupException
 from desktop.lib.i18n import force_unicode
@@ -31,7 +32,7 @@ LOG = logging.getLogger(__name__)
 
 try:
   from beeswax import data_export
-  from beeswax.api import _autocomplete
+  from beeswax.api import _autocomplete, _get_sample_data
   from beeswax.design import hql_query, strip_trailing_semicolon, split_statements
   from beeswax import conf as beeswax_conf
   from beeswax.models import QUERY_TYPES, HiveServerQueryHandle, HiveServerQueryHistory, QueryHistory, Session
@@ -103,44 +104,28 @@ class HS2Api(Api):
   def execute(self, notebook, snippet):
     db = self._get_db(snippet)
 
-    # Multiquery, if not first statement or arrived to the last query
-    statement_id = snippet['result']['handle'].get('statement_id', 0)
-    if snippet['result']['handle'].get('has_more_statements'):
-      try:
-        handle = self._get_handle(snippet)
-        db.close_operation(handle) # Close all the time past multi queries
-      except:
-        LOG.warn('Could not close previous multiquery query')
-      statement_id += 1
-    else:
-      statement_id = 0
+    response = self._get_current_statement(db, snippet)
 
-    statements = self._get_statements(snippet['statement'])
-    statement = statements[statement_id]
-
-    settings = snippet['properties'].get('settings', None)
-    file_resources = snippet['properties'].get('files', None)
-    functions = snippet['properties'].get('functions', None)
-
-    query = hql_query(statement, query_type=QUERY_TYPES[0], settings=settings, file_resources=file_resources, functions=functions)
+    query = self._prepare_hql_query(snippet, response.pop('statement'))
 
     try:
+      db.use(query.database)
       handle = db.client.query(query)
     except QueryServerException, ex:
       raise QueryError(ex.message)
 
     # All good
-    server_id, server_guid  = handle.get()
-    return {
-        'secret': server_id,
-        'guid': server_guid,
-        'operation_type': handle.operation_type,
-        'has_result_set': handle.has_result_set,
-        'modified_row_count': handle.modified_row_count,
-        'log_context': handle.log_context,
-        'statement_id': statement_id,
-        'has_more_statements': statement_id < len(statements) - 1
-    }
+    server_id, server_guid = handle.get()
+    response.update({
+      'secret': server_id,
+      'guid': server_guid,
+      'operation_type': handle.operation_type,
+      'has_result_set': handle.has_result_set,
+      'modified_row_count': handle.modified_row_count,
+      'log_context': handle.log_context,
+    })
+
+    return response
 
   def _get_statements(self, hql_query):
     hql_query = strip_trailing_semicolon(hql_query)
@@ -273,6 +258,56 @@ class HS2Api(Api):
     return _autocomplete(db, database, table, column, nested)
 
 
+  @query_error_handler
+  def get_sample_data(self, snippet, database=None, table=None):
+    db = self._get_db(snippet)
+    return _get_sample_data(db, database, table)
+
+
+  def _get_current_statement(self, db, snippet):
+    # Multiquery, if not first statement or arrived to the last query
+    statement_id = snippet['result']['handle'].get('statement_id', 0)
+    statements_count = snippet['result']['handle'].get('statements_count', 1)
+
+    if snippet['result']['handle'].get('has_more_statements'):
+      try:
+        handle = self._get_handle(snippet)
+        db.close_operation(handle)  # Close all the time past multi queries
+      except:
+        LOG.warn('Could not close previous multiquery query')
+      statement_id += 1
+    else:
+      statement_id = 0
+
+    statements = self._get_statements(snippet['statement'])
+    if statements_count != len(statements):
+      statement_id = 0
+    statement = statements[statement_id]
+
+    return {
+      'statement_id': statement_id,
+      'statement': statement,
+      'has_more_statements': statement_id < len(statements) - 1,
+      'statements_count': len(statements)
+    }
+
+
+  def _prepare_hql_query(self, snippet, statement):
+    settings = snippet['properties'].get('settings', None)
+    file_resources = snippet['properties'].get('files', None)
+    functions = snippet['properties'].get('functions', None)
+    database = snippet.get('database') or 'default'
+
+    return hql_query(
+      statement,
+      query_type=QUERY_TYPES[0],
+      settings=settings,
+      file_resources=file_resources,
+      functions=functions,
+      database=database
+    )
+
+
   def get_select_star_query(self, snippet, database, table):
     db = self._get_db(snippet)
     table = db.get_table(database, table)
@@ -283,6 +318,7 @@ class HS2Api(Api):
     snippet['result']['handle']['secret'], snippet['result']['handle']['guid'] = HiveServerQueryHandle.get_decoded(snippet['result']['handle']['secret'], snippet['result']['handle']['guid'])
     snippet['result']['handle'].pop('statement_id')
     snippet['result']['handle'].pop('has_more_statements')
+    snippet['result']['handle'].pop('statements_count')
     return HiveServerQueryHandle(**snippet['result']['handle'])
 
 

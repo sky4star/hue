@@ -14,70 +14,125 @@
 ## See the License for the specific language governing permissions and
 ## limitations under the License.
 <%!
-  from desktop.views import commonheader, commonfooter, commonshare2, _ko
+  from desktop.views import commonheader, commonfooter, _ko
   from django.utils.translation import ugettext as _
 %>
 
+<%namespace name="assist" file="/assist.mako" />
+<%namespace name="fileBrowser" file="/file_browser.mako" />
+<%namespace name="tableStats" file="/table_stats.mako" />
+<%namespace name="require" file="/require.mako" />
+
 ${ commonheader(_('Welcome Home'), "home", user) | n,unicode }
 
+${ require.config() }
+
+${ tableStats.tableStats() }
+${ assist.assistPanel() }
+${ fileBrowser.fileBrowser() }
+
 <style type="text/css">
-  .sidebar-nav {
-    margin-bottom: 10px;
+  html {
+    height: 100%;
   }
 
-  .sidebar-nav img {
-    margin-right: 6px;
+  body {
+    height:100%;
+    margin: 0;
+    padding: 0;
+    background-color: #FFF;
   }
 
-  .sidebar-nav .dropdown-menu a {
-    padding-left: 6px;
+  .vertical-full {
+    height:100%;
   }
 
-  .tag {
-    float: left;
-    margin-right: 6px;
-    margin-bottom: 4px;
+  .main-content {
+    height: auto;
+    width: 100%;
+    position: absolute;
+    top: 82px;
+    bottom: 0;
+    background-color: #FFF;
   }
 
-  .tag-counter {
-    margin-top: 3px;
-    margin-right: 4px;
+  .panel-container {
+    position: relative;
   }
 
-  .toggle-tag, .document-tags-modal-checkbox, .tags-modal-checkbox {
-    cursor: pointer;
+  .left-panel {
+    position: absolute;
+    height: 100%;
+    overflow: auto;
   }
 
-  .badge-left {
-    border-radius: 9px 0px 0px 9px;
-    padding-right: 5px;
-    font-weight: normal;
+  .resizer {
+    position: absolute;
+    height: 100%;
+    width: 4px;
+    cursor: col-resize;
   }
 
-  .badge-right {
-    border-radius: 0px 9px 9px 0px;
-    padding-left: 5px;
+  .resize-bar {
+    position: absolute;
+    height: 100%;
+    width: 2px;
+    background-color: #F1F1F1;
   }
 
-  .badge-right:hover {
-    background-color: #b94a48;
-  }
-
-  .airy li {
-    margin-bottom: 6px;
-  }
-
-  .white {
-    padding: 9px 18px;
-    margin-top: 1px;
+  .right-panel {
+    position: absolute;
+    height: 100%;
     overflow: hidden;
-    font-size: 14px;
-    line-height: 1.4;
-    color: #737373;
-    text-overflow: ellipsis;
   }
 
+  .show-assist {
+    position: fixed;
+    top: 80px;
+    background-color: #FFF;
+    width: 16px;
+    height: 24px;
+    line-height: 24px;
+    margin-left: -2px;
+    text-align: center;
+    -webkit-border-top-right-radius: 3px;
+    -webkit-border-bottom-right-radius: 3px;
+    -moz-border-radius-topright: 3px;
+    -moz-border-radius-bottomright: 3px;
+    border-top-right-radius: 3px;
+    border-bottom-right-radius: 3px;
+    z-index: 1000;
+    -webkit-transition: margin-left 0.2s linear;
+    -moz-transition: margin-left 0.2s linear;
+    -ms-transition: margin-left 0.2s linear;
+    transition: margin-left 0.2s linear;
+  }
 
+  .show-assist:hover {
+    margin-left: 0;
+  }
+
+  .hide-assist {
+    position: absolute;
+    top: 2px;
+    right: 4px;
+    z-index: 1000;
+    color: #D1D1D1;
+    font-size: 12px;
+    -webkit-transition: margin-right 0.2s linear, color 0.5s ease;
+    -moz-transition: margin-right 0.2s linear, color 0.5s ease;
+    -ms-transition: margin-right 0.2s linear, color 0.5s ease;
+    transition: margin-right 0.2s linear, color 0.5s ease;
+  }
+
+  .hide-assist:hover {
+    margin-right: 2px;
+    color: #338bb8;
+  }
+
+  .home-container {
+    height: 100%;
+  }
 </style>
 
 <div class="navbar navbar-inverse navbar-fixed-top nokids">
@@ -86,9 +141,19 @@ ${ commonheader(_('Welcome Home'), "home", user) | n,unicode }
       <div class="nav-collapse">
         <ul class="nav">
           <li class="currentApp">
-            <a href="${ url('desktop.views.home') }">
+            <a href="${ url('desktop.views.home2') }">
               <img src="${ static('desktop/art/home.png') }" class="app-icon" />
               ${ _('My documents') }
+            </a>
+           </li>
+        </ul>
+        </div>
+      <div class="nav-collapse pull-right">
+        <ul class="nav">
+          <li class="currentApp">
+            <a href="${ url('desktop.views.home') }">
+              <img src="${ static('desktop/art/home.png') }" class="app-icon" />
+              ${ _('Old home') }
             </a>
            </li>
         </ul>
@@ -97,101 +162,48 @@ ${ commonheader(_('Welcome Home'), "home", user) | n,unicode }
   </div>
 </div>
 
-<div id='documentList' class="container-fluid">
-  <div class="row-fluid">
-    <div class="span2">
-      <div class="sidebar-nav">
-         <ul class="nav nav-list">
-          <li class="nav-header">${_('Actions')}</li>
-           <li class="dropdown">
-              <a href="#" data-toggle="dropdown"><i class="fa fa-plus-circle"></i> ${_('New document')}</a>
-              <ul class="dropdown-menu" role="menu">
-                % if 'beeswax' in apps:
-                  <li><a href="${ url('beeswax:index') }"><img src="${ static(apps['beeswax'].icon_path) }" class="app-icon"/> ${_('Hive Query')}</a></li>
-                % endif
-                % if 'impala' in apps:
-                  <li><a href="${ url('impala:index') }"><img src="${ static(apps['impala'].icon_path) }" class="app-icon"/> ${_('Impala Query')}</a></li>
-                % endif
-                % if 'pig' in apps:
-                  <li><a href="${ url('pig:index') }"><img src="${ static(apps['pig'].icon_path) }" class="app-icon"/> ${_('Pig Script')}</a></li>
-                % endif
-                % if 'spark' in apps:
-                  <li><a href="${ url('notebook:index') }"><img src="${ static(apps['spark'].icon_path) }" class="app-icon"/> ${_('Spark Job')}</a></li>
-                % endif
-                % if 'oozie' in apps:
-                <li class="dropdown-submenu">
-                  <a href="#"><img src="${ static(apps['oozie'].icon_path) }" class="app-icon"/> ${_('Oozie Scheduler')}</a>
-                  <ul class="dropdown-menu">
-                    <li><a href="${ url('oozie:new_workflow') }"><img src="${ static('oozie/art/icon_oozie_workflow_48.png') }" class="app-icon"/> ${_('Workflow')}</a></li>
-                    <li><a href="${ url('oozie:new_coordinator') }"><img src="${ static('oozie/art/icon_oozie_coordinator_48.png') }" class="app-icon"/> ${_('Coordinator')}</a></li>
-                    <li><a href="${ url('oozie:new_bundle') }"><img src="${ static('oozie/art/icon_oozie_bundle_48.png') }" class="app-icon"/> ${_('Bundle')}</a></li>
-                  </ul>
-                </li>
-                % endif
-              </ul>
-           </li>
-        </ul>
-      </div>
+<div id="documentList" class="main-content">
+  <a title="${_('Toggle Assist')}" class="pointer show-assist" data-bind="visible: !$root.isLeftPanelVisible(), click: function() { $root.isLeftPanelVisible(true); }" style="display:none;">
+    <i class="fa fa-chevron-right"></i>
+  </a>
 
-    </div>
-
-    <div class="span10">
-      <div class="card card-home" style="margin-top: 0">
-        <input id="searchInput" type="text" placeholder="${ _('Search for name, description, etc...') }" class="input-xlarge search-query" style="margin-left: 20px;margin-top: 5px">
-        <h2 class="card-heading simple">${_('My Documents')}</h2>
-        <span data-bind="text: path"></span>
-        <br/>
-        <input data-bind="value: mkdirFormPath" placeholder="dir name, e.g. projects"></input>
-        <a href="javascript:void(0);" class="btn" data-bind="click: mkdir"><i class="fa fa-plus-circle"></i> ${ _('Create Directory') }</a>
-
-        <input data-bind="value: deleteFormPath" placeholder="doc id, e.g. 50491"></input>
-        <a href="javascript:void(0);" class="btn" data-bind="click: deleteDocument"><i class="fa fa-times"></i> ${ _('Delete') }</a>
-
-        <input data-bind="value: shareFormDocId" placeholder="doc id, e.g. 50491"></input>
-        <a class="share-link btn" rel="tooltip" data-placement="bottom" style="margin-left:20px" data-bind="click: function(e){ prepareShareModal(e) },
-          attr: {'data-original-title': '${ _ko("Share") } ' + name}">
-          <i class="fa fa-users"></i> ${ _('Share') }
+  <div class="vertical-full container-fluid" data-bind="style: { 'padding-left' : $root.isLeftPanelVisible() ? '0' : '20px' }">
+    <div class="vertical-full row-fluid panel-container">
+      <div class="assist-container left-panel" data-bind="visible: $root.isLeftPanelVisible" style="display: none;">
+        <a title="${_('Toggle Assist')}" class="pointer hide-assist" data-bind="click: function() { $root.isLeftPanelVisible(false) }">
+          <i class="fa fa-chevron-left"></i>
         </a>
-
-        <div class="card-body">
-          <p>
-          <table id="documents" class="table table-striped table-condensed" data-bind="visible: documents().length > 0">
-            <thead>
-              <tr>
-                <th style="width: 26px">&nbsp;</th>
-                <th style="width: 200px">${_('Name')}</th>
-                <th>${_('Description')}</th>
-              </tr>
-            </thead>
-            <tbody data-bind="template: { name: 'document-template', foreach: renderableDocuments}">
-            </tbody>
-            <tfoot data-bind="visible: documents().length > 0">
-              <tr>
-                <td colspan="7">
-                  <div class="pull-right" style="margin-top: 10px" data-bind="visible: hasPrevious() || hasNext()">
-                    <span>${_('Page')} <input type="number" class="input-mini" style="text-align: center" data-bind="value: page"> ${_('of')} <span data-bind="text: totalPages"></span></span>
-                  </div>
-                  <div class="pagination">
-                    <ul>
-                      <li><a data-bind="click: previousPage, visible: hasPrevious">${_('Previous')}</a></li>
-                      <li><a data-bind="click: nextPage, visible: hasNext">${_('Next')}</a></li>
-                    </ul>
-                  </div>
-                </td>
-              </tr>
-            </tfoot>
-          </table>
-          <div data-bind="visible: documents().length == 0">
-            <h4 style="color: #777; margin-bottom: 30px">${_('There are currently no documents in this project or tag.')}</h4>
-          </div>
-          </p>
-        </div>
+        <div class="assist" data-bind="component: {
+          name: 'assist-panel',
+          params: {
+            user: '${user.username}',
+            sql: {
+              sourceTypes: [{
+                name: 'hive',
+                type: 'hive'
+              }],
+              navigationSettings: {
+                openItem: false,
+                showPreview: true,
+                showStats: true
+              },
+            },
+            visibleAssistPanels: ['documents']
+          }
+        }"></div>
+      </div>
+      <div class="resizer" data-bind="visible: $root.isLeftPanelVisible, splitDraggable : { appName: 'notebook', leftPanelVisible: $root.isLeftPanelVisible }" style="display:none;"><div class="resize-bar">&nbsp;</div></div>
+      <div class="right-panel home-container" data-bind="style: { 'padding-left' : $root.isLeftPanelVisible() ? '8px' : '0' }">
+        <div class="file-browser" data-bind="component: {
+          name: 'file-browser',
+          params: {
+            activeEntry: activeEntry
+          }
+        }"></div>
       </div>
     </div>
-
   </div>
 </div>
-
 
 <script type="text/html" id="document-template">
   <tr>
@@ -201,46 +213,57 @@ ${ commonheader(_('Welcome Home'), "home", user) | n,unicode }
   </tr>
 </script>
 
-
-${ commonshare2() | n,unicode }
-
-
-<script src="${ static('desktop/ext/js/datatables-paging-0.1.js') }" type="text/javascript" charset="utf-8"></script>
-<script src="${ static('desktop/ext/js/knockout.min.js') }" type="text/javascript" charset="utf-8"></script>
-<script src="${ static('desktop/ext/js/knockout-mapping.min.js') }" type="text/javascript" charset="utf-8"></script>
-<script src="${ static('desktop/js/home2.vm.js') }"></script>
-<script src="${ static('desktop/js/share2.vm.js') }"></script>
-
-
 <script type="text/javascript" charset="utf-8">
-  var viewModel, shareViewModel;
+  require([
+    'knockout',
+    'desktop/js/home2.vm',
+    'assistPanel',
+    'tableStats',
+    'fileBrowser',
+    'knockout-mapping',
+    'knockout-sortable',
+    'ko.hue-bindings'
+  ], function (ko, HomeViewModel, ShareViewModel) {
 
-  $(document).ready(function() {
-    viewModel = new HomeViewModel();
-    ko.applyBindings(viewModel, $('#documentList')[0]);
+    ko.options.deferUpdates = true;
 
-    shareViewModel = initSharing("#documentShareModal");
-    shareViewModel.setDocId(-1);
+    $(document).ready(function () {
+      var options = {
+        user: '${ user.username }',
+        i18n: {
+          errorFetchingTableDetails: '${_('An error occurred fetching the table details. Please try again.')}',
+          errorFetchingTableFields: '${_('An error occurred fetching the table fields. Please try again.')}',
+          errorFetchingTableSample: '${_('An error occurred fetching the table sample. Please try again.')}',
+          errorRefreshingTableStats: '${_('An error occurred refreshing the table stats. Please try again.')}',
+          errorLoadingDatabases: '${ _('There was a problem loading the databases. Please try again.') }',
+          errorLoadingTablePreview: '${ _('There was a problem loading the table preview. Please try again.') }'
+        }
+      };
 
-    viewModel.loadDocuments(location.getParameter('path') ? location.getParameter('path') : '/');
+      var viewModel = new HomeViewModel(options);
 
-    prepareShareModal = function(job) {
-      shareViewModel.setDocId(viewModel.shareFormDocId());
-      openShareModal();
-    };
+      var loadUrlParam = function () {
+        if (location.getParameter('uuid')) {
+          viewModel.openUuid(location.getParameter('uuid'));
+        } else if (location.getParameter('path')) {
+          viewModel.openPath(location.getParameter('path'));
+        } else {
+          viewModel.activeEntry().load();
+        }
+      };
+      window.onpopstate = loadUrlParam;
+      loadUrlParam();
+
+      viewModel.activeEntry.subscribe(function (newEntry) {
+        if (newEntry.definition().uuid && ! newEntry.isRoot()) {
+          hueUtils.changeURL('/home?uuid=' + newEntry.definition().uuid);
+        }
+      });
+
+      ko.applyBindings(viewModel, $('#documentList')[0]);
+
+    });
   });
 </script>
-
-
-<style type="text/css">
-  .tourSteps {
-    min-height: 150px;
-  }
-</style>
-
-
-##
-## Add a Tour?
-##
 
 ${ commonfooter(request, messages) | n,unicode }

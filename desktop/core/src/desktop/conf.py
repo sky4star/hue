@@ -20,14 +20,14 @@ import logging
 import os
 import socket
 import stat
-import subprocess
 
 from django.utils.translation import ugettext_lazy as _
 
 from desktop.redaction.engine import parse_redaction_policy_from_file
 from desktop.lib.conf import Config, ConfigSection, UnspecifiedConfigSection,\
                              coerce_bool, coerce_csv, coerce_json_dict,\
-                             validate_path, list_of_compiled_res, coerce_str_lowercase
+                             validate_path, list_of_compiled_res, coerce_str_lowercase, \
+                             coerce_password_from_script
 from desktop.lib.i18n import force_unicode
 from desktop.lib.paths import get_desktop_root
 
@@ -52,24 +52,11 @@ def coerce_port(port):
   else:
     return port
 
+
 def coerce_file(path):
   if path and not os.path.isfile(path):
     raise Exception('File %s does not exist.' % path)
   return path
-
-def coerce_password_from_script(script):
-  p = subprocess.Popen(script, shell=True, stdout=subprocess.PIPE)
-  stdout, stderr = p.communicate()
-
-  if p.returncode != 0:
-    if os.environ.get('HUE_IGNORE_PASSWORD_SCRIPT_ERRORS') is None:
-      raise subprocess.CalledProcessError(p.returncode, script)
-    else:
-      return None
-
-  # whitespace may be significant in the password, but most files have a
-  # trailing newline.
-  return stdout.strip('\n')
 
 
 def coerce_timedelta(value):
@@ -103,6 +90,12 @@ HTTP_ALLOWED_METHODS = Config(
   type=coerce_csv,
   private=True,
   default=['OPTIONS', 'GET', 'HEAD', 'POST', 'PUT', 'DELETE', 'CONNECT'])
+
+X_FRAME_OPTIONS = Config(
+  key="http_x_frame_options",
+  help=_("X-Frame-Options HTTP header value."),
+  type=str,
+  default="SAMEORIGIN")
 
 SSL_CERTIFICATE = Config(
   key="ssl_certificate",
@@ -146,7 +139,7 @@ SSL_CIPHER_LIST = Config(
 
 SSL_PASSWORD = Config(
   key="ssl_password",
-  help=_("SSL password of the the certificate"),
+  help=_("SSL password of the certificate"),
   default=None)
 
 SSL_PASSWORD_SCRIPT = Config(
@@ -159,7 +152,7 @@ SSL_CACERTS = Config(
   key="ssl_cacerts",
   help=_('Path to default Certificate Authority certificates.'),
   type=str,
-  default='/etc/hue/cacerts.pem')
+  default='')
 
 SSL_VALIDATE = Config(
   key="ssl_validate",
@@ -643,6 +636,10 @@ CUSTOM = ConfigSection(
                    default="",
                    help=_("The login splash HTML code. This code will be placed in the login page, "
                         "useful for security warning messages.")),
+    CACHEABLE_TTL=Config("cacheable_ttl",
+                   default=86400000,
+                   type=int,
+                   help=_("The cache TTL in milliseconds for the assist/autocomplete/etc calls. Set to 0 it disables the cache.")),
 ))
 
 AUTH = ConfigSection(
@@ -677,7 +674,7 @@ AUTH = ConfigSection(
                                   type=coerce_bool,
                                   default=True),
     FORCE_USERNAME_LOWERCASE = Config("force_username_lowercase",
-                                      help=_("Force usernames to lowercase when creating new users from LDAP."),
+                                      help=_("Force usernames to lowercase when creating new users."),
                                       type=coerce_bool,
                                       default=True),
     EXPIRES_AFTER = Config("expires_after",
@@ -689,6 +686,11 @@ AUTH = ConfigSection(
                                 help=_("Apply 'expires_after' to superusers."),
                                 type=coerce_bool,
                                 default=True),
+    IDLE_SESSION_TIMEOUT = Config("idle_session_timeout",
+                            help=_("Users will automatically be logged out after 'n' seconds of inactivity."
+                                   "A negative number means that idle sessions will not be timed out."),
+                            type=int,
+                            default=-1),
     CHANGE_DEFAULT_PASSWORD = Config(
                             key="change_default_password",
                             help=_("When set to true this will allow you to specify a password for "
@@ -1073,6 +1075,13 @@ DJANGO_EMAIL_BACKEND = Config(
   help=_("The email backend to use."),
   type=str,
   default="django.core.mail.backends.smtp.EmailBackend"
+)
+
+USE_NEW_EDITOR = Config( # To remove in Hue 4
+  key='use_new_editor',
+  default=True,
+  type=coerce_bool,
+  help=_('Choose whether to show the new SQL editor.')
 )
 
 def validate_ldap(user, config):

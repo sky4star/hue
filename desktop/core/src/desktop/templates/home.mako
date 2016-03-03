@@ -16,6 +16,9 @@
 <%!
   from desktop.views import commonheader, commonfooter, commonshare, _ko
   from django.utils.translation import ugettext as _
+
+  from desktop.conf import USE_NEW_EDITOR
+  use_new_home = USE_NEW_EDITOR.get()
 %>
 
 ${ commonheader(_('Welcome Home'), "home", user) | n,unicode }
@@ -93,6 +96,18 @@ ${ commonheader(_('Welcome Home'), "home", user) | n,unicode }
            </li>
         </ul>
       </div>
+      % if use_new_home:
+      <div class="nav-collapse pull-right">
+        <ul class="nav">
+          <li class="currentApp">
+            <a href="${ url('desktop.views.home2') }">
+              <img src="${ static('desktop/art/home.png') }" class="app-icon" />
+              ${ _('New Home') }
+            </a>
+           </li>
+        </ul>
+      </div>
+      % endif
     </div>
   </div>
 </div>

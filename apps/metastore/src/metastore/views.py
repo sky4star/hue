@@ -141,34 +141,32 @@ def show_tables(request, database=None):
   if database is None:
     database = 'default' # Assume always 'default'
 
-  db = dbms.get(request.user)
-
-  try:
-    databases = db.get_databases()
-
-    if database not in databases:
-      database = 'default'
-
-    if request.method == 'POST':
-      db_form = DbForm(request.POST, databases=databases)
-      if db_form.is_valid():
-        database = db_form.cleaned_data['database']
-    else:
-      db_form = DbForm(initial={'database': database}, databases=databases)
-
-    search_filter = request.GET.get('filter', '')
-
-    tables = db.get_tables_meta(database=database, table_names=search_filter) # SparkSql returns []
-    table_names = [table['name'] for table in tables]
-  except Exception, e:
-    raise PopupException(_('Failed to retrieve tables for database: %s' % database), detail=e)
-
-  database_meta = db.get_database(database)
-
   if request.REQUEST.get("format", "html") == "json":
+    db = dbms.get(request.user)
+
+    try:
+      databases = db.get_databases()
+
+      if database not in databases:
+        database = 'default'
+
+      if request.method == 'POST':
+        db_form = DbForm(request.POST, databases=databases)
+        if db_form.is_valid():
+          database = db_form.cleaned_data['database']
+      else:
+        db_form = DbForm(initial={'database': database}, databases=databases)
+
+      search_filter = request.GET.get('filter', '')
+
+      tables = db.get_tables_meta(database=database, table_names=search_filter) # SparkSql returns []
+      table_names = [table['name'] for table in tables]
+    except Exception, e:
+      raise PopupException(_('Failed to retrieve tables for database: %s' % database), detail=e)
+
     resp = JsonResponse({
         'status': 0,
-        'database_meta': database_meta,
+        'database_meta': db.get_database(database),
         'tables': tables,
         'table_names': table_names,
         'search_filter': search_filter
@@ -287,7 +285,7 @@ def alter_table(request, database, table):
 @require_http_methods(["POST"])
 def alter_column(request, database, table):
   db = dbms.get(request.user)
-  response = {'status': -1, 'data': ''}
+  response = {'status': -1, 'message': ''}
   try:
     column = request.POST.get('column', None)
 
@@ -313,7 +311,7 @@ def alter_column(request, database, table):
       raise PopupException(_('Column `%s`.`%s` `%s` not found') % (database, table, column))
   except Exception, ex:
     response['status'] = 1
-    response['data'] = _("Failed to alter column `%s`.`%s` `%s`: %s") % (database, table, column, str(ex))
+    response['message'] = _("Failed to alter column `%s`.`%s` `%s`: %s") % (database, table, column, str(ex))
 
   return JsonResponse(response)
 
@@ -329,7 +327,7 @@ def drop_table(request, database):
       # Can't be simpler without an important refactoring
       design = SavedQuery.create_empty(app_name='beeswax', owner=request.user, data=hql_query('').dumps())
       query_history = db.drop_tables(database, tables_objects, design)
-      url = reverse('beeswax:watch_query_history', kwargs={'query_history_id': query_history.id}) + '?on_success_url=' + reverse('metastore:show_tables')
+      url = reverse('beeswax:watch_query_history', kwargs={'query_history_id': query_history.id}) + '?on_success_url=' + reverse('metastore:show_tables', kwargs={'database': database})
       return redirect(url)
     except Exception, ex:
       error_message, log = dbms.expand_exception(ex, db)

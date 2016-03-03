@@ -37,7 +37,7 @@
     self.i18n = options.i18n;
     self.navigationSettings = options.navigationSettings;
     self.assistHelper = options.assistHelper;
-    self.type = options.type;
+    self.sourceType = options.type;
     self.name = options.name;
 
     self.hasErrors = ko.observable(false);
@@ -45,28 +45,30 @@
     self.isSearchVisible = ko.observable(false);
     self.editingSearch = ko.observable(false);
 
+    self.invalidateOnRefresh = ko.observable('cache');
+
     self.filter = {
       query: ko.observable("").extend({ rateLimit: 150 })
     };
 
-    self.filterActive = ko.computed(function () {
+    self.filterActive = ko.pureComputed(function () {
       return self.filter.query().length !== 0;
     });
 
-    var storageSearchVisible = $.totalStorage(self.type + ".assist.searchVisible");
+    var storageSearchVisible = $.totalStorage(self.sourceType + ".assist.searchVisible");
     self.searchVisible = ko.observable(storageSearchVisible || false);
 
     self.searchVisible.subscribe(function (newValue) {
-      $.totalStorage(self.type + ".assist.searchVisible", newValue);
+      $.totalStorage(self.sourceType + ".assist.searchVisible", newValue);
     });
 
     self.databases = ko.observableArray();
 
-    self.hasEntries = ko.computed(function() {
+    self.hasEntries = ko.pureComputed(function() {
       return self.databases().length > 0;
     });
 
-    self.filteredEntries = ko.computed(function () {
+    self.filteredEntries = ko.pureComputed(function () {
       if (self.filter.query().length === 0) {
         return self.databases();
       }
@@ -83,7 +85,7 @@
 
     self.reloading = ko.observable(false);
 
-    self.loadingTables = ko.computed(function() {
+    self.loadingTables = ko.pureComputed(function() {
       return typeof self.selectedDatabase() != "undefined" && self.selectedDatabase() !== null && self.selectedDatabase().loading();
     });
 
@@ -100,7 +102,7 @@
         }
         $.totalStorage("hue.assist.lastSelectedDb." + self.assistHelper.getTotalStorageUserPrefix(), newValue.definition.name);
         huePubSub.publish("assist.database.set", {
-          source: self.type,
+          source: self.sourceType,
           name: newValue.definition.name
         })
       }
@@ -110,12 +112,11 @@
     self.loading = ko.observable(false);
     var dbIndex = {};
     var nestedFilter = {
-      query: ko.observable("").extend({ rateLimit: 150 }),
+      query: ko.observable("").extend({ rateLimit: { timeout: 250, method: 'notifyWhenChangesStop' } }),
       showTables: ko.observable(true),
       showViews: ko.observable(true)
     };
-    var updateDatabases = function (names) {
-      var lastSelectedDb = self.selectedDatabase() ? self.selectedDatabase().definition.name : null;
+    var updateDatabases = function (names, lastSelectedDb) {
       dbIndex = {};
       self.databases($.map(names, function(name) {
         var database = new AssistDbEntry({
@@ -148,6 +149,8 @@
         self.selectedDatabase(dbIndex[lastSelectedDb]);
       } else if (dbIndex["default"]) {
         self.selectedDatabase(dbIndex["default"]);
+      } else if (self.databases().length > 0) {
+        self.selectedDatabase(self.databases()[0]);
       }
     };
 
@@ -156,9 +159,19 @@
         return;
       }
       self.loading(true);
+      var lastSelectedDb = self.selectedDatabase() ? self.selectedDatabase().definition.name : null;
+      self.selectedDatabase(null);
+      self.databases([]);
       self.assistHelper.loadDatabases({
-        sourceType: self.type,
-        callback: updateDatabases
+        sourceType: self.sourceType,
+        successCallback: function(data) {
+          self.hasErrors(false);
+          updateDatabases(data, lastSelectedDb)
+        },
+        errorCallback: function() {
+          self.hasErrors(true);
+          updateDatabases([]);
+        }
       });
     };
 
@@ -171,20 +184,31 @@
 
     self.reload = function() {
       self.reloading(true);
-      self.assistHelper.clearCache({
-        sourceType: self.type,
-        clearAll: true
+      huePubSub.publish('assist.clear.db.cache', {
+        sourceType: self.sourceType,
+        clearAll: true,
+        invalidateImpala: self.invalidateOnRefresh()
       });
+      self.invalidateOnRefresh('cache');
       self.initDatabases();
     };
 
-    huePubSub.subscribe('assist.refresh', self.reload);
+    huePubSub.subscribe('assist.db.refresh', function (type) {
+      if (self.sourceType === type) {
+        self.reload();
+      }
+    });
   }
 
   AssistDbSource.prototype.toggleSearch = function() {
     var self = this;
     self.isSearchVisible(!self.isSearchVisible());
     self.editingSearch(self.isSearchVisible());
+  };
+
+  AssistDbSource.prototype.triggerRefresh = function () {
+    var self = this;
+    huePubSub.publish('assist.db.refresh', self.sourceType);
   };
 
   return AssistDbSource;

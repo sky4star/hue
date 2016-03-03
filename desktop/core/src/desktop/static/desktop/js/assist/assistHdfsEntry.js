@@ -50,6 +50,7 @@
 
     self.loaded = false;
     self.loading = ko.observable(false);
+    self.hasErrors = ko.observable(false);
     self.open = ko.observable(false);
 
     self.open.subscribe(function(newValue) {
@@ -76,6 +77,7 @@
     self.loading(true);
 
     var successCallback = function(data) {
+      self.hasErrors(false);
       var filteredFiles = $.grep(data.files, function (file) {
         return file.name !== '.' && file.name !== '..';
       });
@@ -94,13 +96,18 @@
     };
 
     var errorCallback = function () {
+      self.hasErrors(true);
       self.loading(false);
       if (callback) {
         callback();
       }
     };
 
-    self.assistHelper.fetchHdfsPath(self.getHierarchy(), successCallback, errorCallback)
+    self.assistHelper.fetchHdfsPath({
+      pathParts: self.getHierarchy(),
+      successCallback: successCallback,
+      errorCallback: errorCallback
+    })
   };
 
   AssistHdfsEntry.prototype.loadDeep = function(folders, callback) {
@@ -118,7 +125,7 @@
       });
       if (foundEntry.length === 1) {
         foundEntry[0].loadDeep(folders, callback);
-      } else {
+      } else if (! self.hasErrors()) {
         callback(self);
       }
     };

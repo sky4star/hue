@@ -23,8 +23,8 @@ import beeswax.hive_site
 from django.utils.translation import ugettext_lazy as _t, ugettext as _
 
 from desktop.conf import default_ssl_cacerts, default_ssl_validate, AUTH_PASSWORD as DEFAULT_AUTH_PASSWORD,\
-  coerce_password_from_script, AUTH_USERNAME as DEFAULT_AUTH_USERNAME
-from desktop.lib.conf import ConfigSection, Config, coerce_bool
+  AUTH_USERNAME as DEFAULT_AUTH_USERNAME
+from desktop.lib.conf import ConfigSection, Config, coerce_bool, coerce_csv, coerce_password_from_script
 from desktop.lib.exceptions import StructuredThriftTransportException
 
 from beeswax.settings import NICE_NAME
@@ -100,7 +100,7 @@ DOWNLOAD_ROW_LIMIT = Config(
   key='download_row_limit',
   default=1000000,
   type=int,
-  help=_t('A limit to the number of rows that can be downloaded from a query. A value of -1 means there will be no limit. A maximum of 65,000 is applied to XLS downloads.'))
+  help=_t('A limit to the number of rows that can be downloaded from a query. A value of -1 means there will be no limit. A maximum of 30,000 is applied to XLS downloads.'))
 
 APPLY_NATURAL_SORT_MAX = Config(
   key="apply_natural_sort_max",
@@ -124,11 +124,11 @@ THRIFT_VERSION = Config(
   default=7
 )
 
-USE_NEW_EDITOR = Config( # To remove in Hue 3.10
-  key='use_new_editor',
-  default=False,
-  type=coerce_bool,
-  help=_t('Choose whether to show the new editors for beta testing.')
+CONFIG_WHITELIST = Config(
+  key='config_whitelist',
+  default='hive.map.aggr,hive.exec.compress.output,hive.exec.parallel,hive.execution.engine,mapreduce.job.queuename',
+  type=coerce_csv,
+  help=_t('A comma-separated list of white-listed Hive configuration properties that users are authorized to set.')
 )
 
 SSL = ConfigSection(

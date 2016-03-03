@@ -14,107 +14,111 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+(function (root, factory) {
+  if(typeof define === "function" && define.amd) {
+    define([
+      'knockout',
+      'desktop/js/assist/assistHelper',
+      'desktop/js/fileBrowser/hueFileEntry',
+      'knockout-mapping'
+    ], factory);
+  } else {
+    root.HomeViewModel = factory(ko, assistHelper, HueFileEntry);
+  }
+}(this, function (ko, AssistHelper, HueFileEntry) {
 
-function HomeViewModel(data) {
-  var self = this;
+  function HomeViewModel(options) {
+    var self = this;
 
-  self.documents = ko.observableArray();
-  self.path = ko.mapping.fromJS('/');
-  self.mkdirFormPath = ko.observable('');
-  self.deleteFormPath = ko.observable('');
-  self.shareFormDocId = ko.observable('');
+    self.assistHelper = AssistHelper.getInstance(options);
+    self.isLeftPanelVisible = ko.observable();
+    self.assistHelper.withTotalStorage('assist', 'assist_panel_visible', self.isLeftPanelVisible, true);
 
-  self.page = ko.observable(1);
-  self.documentsPerPage = ko.observable(50);
+    self.activeEntry = ko.observable();
+    self.trashEntry = ko.observable();
+    self.activeEntry(new HueFileEntry({
+      activeEntry: self.activeEntry,
+      trashEntry: self.trashEntry,
+      assistHelper: self.assistHelper,
+      app: 'documents',
+      definition: {
+        name: '/'
+      }
+    }));
 
-  self.renderableDocuments = ko.computed(function () {
-    return self.documents().slice((self.page() * 1 - 1) * self.documentsPerPage(), (self.page() * self.documentsPerPage()) - 1);
-  });
+    self.shareFormDocId = ko.observable('');
+    self.exportFormDocIds = ko.observable('');
 
-  self.totalPages = ko.computed(function () {
-    return Math.ceil(self.documents().length / self.documentsPerPage());
-  });
-
-  self.hasPrevious = ko.computed(function () {
-    return self.page() > 1;
-  });
-
-  self.hasNext = ko.computed(function () {
-    return self.page() < self.totalPages();
-  });
-
-  self.page.subscribe(function (value) {
-    if (isNaN(value * 1)) {
-      self.page(1);
-    }
-    if (value > self.totalPages()) {
-      self.page(self.totalPages());
-    }
-    if (value < 1) {
-      self.page(1);
-    }
-  });
-
-  self.nextPage = function () {
-    if (self.hasNext()) {
-      self.page(self.page() + 1);
-    }
+    self.exportDocuments = function() {
+      $('#export-documents').find('input[name=\'documents\']').val(ko.mapping.toJSON(self.exportFormDocIds().split(",")));
+      $('#export-documents').find('form').submit();
+    };
   }
 
-  self.previousPage = function () {
-    if (self.hasPrevious()) {
-      self.page(self.page() - 1);
-    }
-  }
-
-  self.documents.subscribe(function () {
-    self.page(1);
-  });
-
-
-  self.loadDocuments = function(path) {
-    $.get("/desktop/api2/docs2/", {
-     path: path
-    }, function(data) {
-      self.path(path);
-      self.documents(data.documents);
-    }).fail(function (xhr) {
-      $(document).trigger("error", xhr.responseText);
+  HomeViewModel.prototype.openUuid = function (uuid) {
+    var self = this;
+    self.activeEntry(undefined);
+    var entry = new HueFileEntry({
+      activeEntry: self.activeEntry,
+      trashEntry: self.trashEntry,
+      assistHelper: self.assistHelper,
+      app: 'documents',
+      definition: {
+        uuid: location.getParameter('uuid'),
+        name: 'unknown',
+        type: 'directory',
+        path: '/unknown'
+      }
     });
+
+    var lastParent = entry;
+
+    var loadParents = function () {
+      if (lastParent.parent) {
+        lastParent = lastParent.parent;
+        lastParent.load(loadParents);
+      } else {
+        self.activeEntry(entry);
+      }
+    };
+
+    entry.load(loadParents);
   };
 
-  self.mkdir = function() {
-    $.post("/desktop/api2/doc/mkdir", {
-      parent_path: ko.mapping.toJSON(self.path),
-      name: ko.mapping.toJSON(self.mkdirFormPath)
-    }, function (data) {
-      if (data.status == 0) {
-        self.loadDocuments(self.path()); // TODO proper refresh
-        self.mkdirFormPath('');
+  HomeViewModel.prototype.openPath = function (path) {
+    var self = this;
+    var parts = path.split('/');
+    parts.shift(); // Remove root
+    self.activeEntry(undefined);
+    var lastChild = new HueFileEntry({
+      activeEntry: self.activeEntry,
+      trashEntry: self.trashEntry,
+      assistHelper: self.assistHelper,
+      app: 'documents',
+      definition: {
+        name: '',
+        type: 'directory',
+        path: '/'
       }
-      else {
-        $(document).trigger("error", data.message);
-      }
-    }).fail(function (xhr) {
-      $(document).trigger("error", xhr.responseText);
     });
+
+    var loadDeep = function () {
+      if (parts.length > 0) {
+        var targetDir = parts.shift();
+        var foundDirs = $.grep(lastChild.entries(), function (entry) {
+          return entry.definition().name === targetDir;
+        });
+        if (foundDirs.length === 1) {
+          lastChild = foundDirs[0];
+          lastChild.load(loadDeep);
+          return;
+        }
+      }
+      self.activeEntry(lastChild);
+    };
+
+    lastChild.load(loadDeep);
   };
 
-  self.deleteDocument = function() {
-    $.post("/desktop/api2/doc/delete", {
-      doc_id: ko.mapping.toJSON(self.deleteFormPath),
-      skip_trash: ko.mapping.toJSON(false)
-    }, function (data) {
-      if (data.status == 0) {
-        self.loadDocuments(self.path()); // TODO proper refresh
-        self.mkdirFormPath('');
-      }
-      else {
-        $(document).trigger("error", data.message);
-      }
-    }).fail(function (xhr) {
-      $(document).trigger("error", xhr.responseText);
-    });
-  };
-
-}
+  return HomeViewModel;
+}));

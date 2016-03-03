@@ -68,16 +68,19 @@ ${ assist.assistPanel() }
           <div class="assist" data-bind="component: {
               name: 'assist-panel',
               params: {
-                sourceTypes: [{
-                  name: 'hive',
-                  type: 'hive'
-                }],
                 user: '${user.username}',
-                navigationSettings: {
-                  openItem: true,
-                  showPreview: true,
-                  showStats: false
-                }
+                sql: {
+                  sourceTypes: [{
+                    name: 'hive',
+                    type: 'hive'
+                  }],
+                  navigationSettings: {
+                    openItem: false,
+                    showPreview: true,
+                    showStats: true
+                  }
+                },
+                visibleAssistPanels: ['sql']
               }
             }"></div>
         </div>
@@ -88,8 +91,7 @@ ${ assist.assistPanel() }
           <div class="metastore-main">
             <h3>
               <div class="inline-block pull-right" style="margin-top: -8px">
-                <a href="${ url('beeswax:import_wizard', database=database) }" title="${_('Create a new table from a file')}" class="inactive-action"><i class="fa fa-files-o"></i></a>
-                <a href="${ url('beeswax:create_table', database=database) }" title="${_('Create a new table manually')}" class="inactive-action margin-left-10"><i class="fa fa-wrench"></i></a>
+                <a href="${ url('beeswax:create_table', database=database) }" title="${_('Create a new table manually')}" class="inactive-action margin-left-10"><i class="fa fa-plus"></i></a>
               </div>
 
               <ul id="breadcrumbs" class="nav nav-pills hueBreadcrumbBar">
@@ -225,10 +227,11 @@ ${ assist.assistPanel() }
 
     function MetastoreViewModel(options) {
       var self = this;
+      self.assistHelper = AssistHelper.getInstance(options);
       self.assistAvailable = ko.observable(true);
-      self.isLeftPanelVisible = ko.observable(self.assistAvailable() && $.totalStorage('spark_left_panel_visible') != null && $.totalStorage('spark_left_panel_visible'));
+      self.isLeftPanelVisible = ko.observable();
+      self.assistHelper.withTotalStorage('assist', 'assist_panel_visible', self.isLeftPanelVisible, true);
 
-      self.assistHelper = new AssistHelper(options);
 
       huePubSub.subscribe("assist.table.selected", function (tableDef) {
         location.href = '/metastore/table/' + tableDef.database + '/' + tableDef.name;
@@ -236,10 +239,6 @@ ${ assist.assistPanel() }
 
       huePubSub.subscribe("assist.database.selected", function (databaseDef) {
         location.href = '/metastore/tables/' + databaseDef.name;
-      });
-
-      self.isLeftPanelVisible.subscribe(function (newValue) {
-        $.totalStorage('spark_left_panel_visible', newValue);
       });
     }
 

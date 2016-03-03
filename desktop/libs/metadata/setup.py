@@ -21,11 +21,11 @@ setup(
       name = "metadata",
       version = VERSION,
       url = 'http://github.com/cloudera/hue',
-      description = "Search Libraries",
+      description = "Metadata Libraries",
       packages = find_packages('src'),
       package_dir = {'': 'src' },
       install_requires = ['setuptools', 'desktop'],
       # Even libraries need to be registered as desktop_apps,
       # if they have configuration, like this one.
-      entry_points = { 'desktop.sdk.lib': 'metadata=metadata' },
+      entry_points = { 'desktop.sdk.application': 'metadata=metadata' },
 )

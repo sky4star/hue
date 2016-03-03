@@ -75,7 +75,7 @@ function BeeswaxViewModel(server, assistHelper) {
   self.database = ko.observable(null);
 
   var type = server === "beeswax" ? "hive" : "impala";
-  huePubSub.subscribe("assist.ready", function () {
+  huePubSub.subscribe("assist.db.panel.ready", function () {
     huePubSub.publish('assist.set.database', {
       source: type,
       name: self.database()
@@ -98,13 +98,13 @@ function BeeswaxViewModel(server, assistHelper) {
 
   self.design.inlineErrors = ko.computed(function() {
     return ko.utils.arrayFilter(self.design.errors(), function(err) {
-        return err.toLowerCase().indexOf("line") > -1;
+        return err && err.toLowerCase().indexOf("line") > -1;
     });
   });
 
   self.design.watch.inlineErrors = ko.computed(function() {
     return ko.utils.arrayFilter(self.design.watch.errors(), function(err) {
-        return err.toLowerCase().indexOf("line") > -1;
+        return err && err.toLowerCase().indexOf("line") > -1;
     });
   });
 
@@ -428,7 +428,9 @@ function BeeswaxViewModel(server, assistHelper) {
       type: 'GET',
       success: function(data) {
         self.updateHistory(data.query_history);
-        self.database(data.query_history.database);
+        if (data.query_history.database) {
+          self.database(data.query_history.database);
+        }
         $(document).trigger('fetched.query', [data]);
       },
       error: error_fn,
@@ -906,7 +908,7 @@ function BeeswaxViewModel(server, assistHelper) {
             self.design.results.save.errors(null);
 
             var redirect_fn = function() {
-              window.location.href = data.success_url;
+              window.location.href = data.success_url + (data.success_url.indexOf("?") > -1 ? "&" : "?") + "refresh=true";
               self.design.isRunning(false);
             };
             if (data.id) {

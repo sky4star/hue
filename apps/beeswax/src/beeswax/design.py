@@ -93,6 +93,10 @@ class HQLdesign(object):
         self._data_dict['query']['type'] = query_type
 
   @property
+  def database(self):
+    return self._data_dict['query']['database']
+
+  @property
   def hql_query(self):
     return self._data_dict['query']['query']
 
@@ -106,15 +110,15 @@ class HQLdesign(object):
 
   @property
   def settings(self):
-    return list(self._data_dict['settings'])
+    return list(self._data_dict.get('settings', []))
 
   @property
   def file_resources(self):
-    return list(self._data_dict['file_resources'])
+    return list(self._data_dict.get('file_resources', []))
 
   @property
   def functions(self):
-    return list(self._data_dict['functions'])
+    return list(self._data_dict.get('functions', []))
 
   @property
   def statement_count(self):
@@ -189,7 +193,8 @@ class HQLdesign(object):
         scheme = get_hdfs().fs_defaultfs
       else:
         scheme = ''
-      configuration.append('ADD %(type)s %(scheme)s%(path)s' % {'type': f['type'], 'path': f['path'], 'scheme': scheme})
+      configuration.append('ADD %(type)s %(scheme)s%(path)s' %
+                           {'type': f['type'].upper(), 'path': f['path'], 'scheme': scheme})
 
     for f in self.functions:
       configuration.append("CREATE TEMPORARY FUNCTION %(name)s AS '%(class_name)s'" %

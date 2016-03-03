@@ -50,13 +50,16 @@ ${ layout.menubar(section='query') }
               params: {
                 user: HIVE_AUTOCOMPLETE_USER,
                 onlySql: true,
-                sourceTypes: editorViewModel.sqlSourceTypes,
-                activeSourceType: snippetType,
-                navigationSettings: {
-                  openItem: false,
-                  showPreview: true,
-                  showStats: true
-                }
+                sql: {
+                  sourceTypes: editorViewModel.sqlSourceTypes,
+                  activeSourceType: snippetType,
+                  navigationSettings: {
+                    openItem: false,
+                    showPreview: true,
+                    showStats: true
+                  }
+                },
+                visibleAssistPanels: ['sql']
               }
             }"></div>
           </div>
@@ -314,6 +317,7 @@ ${ layout.menubar(section='query') }
               % endif
               <button data-bind="click: saveAsModal" type="button" class="btn">${_('Save as...')}</button>
               <button data-bind="click: tryExplainQuery, visible: $root.canExecute" type="button" id="explainQuery" class="btn">${_('Explain')}</button>
+              <button data-bind="click: formatQuery" type="button" class="btn">${_('Format')}</button>
               &nbsp; ${_('or create a')} &nbsp;
               <button data-bind="click: createNewQuery" type="button" class="btn">${_('New query')}</button>
               <br/><br/>
@@ -336,11 +340,12 @@ ${ layout.menubar(section='query') }
           class="view-query-results hide pull-right"><h4><i class="fa fa-save"></i></h4>
         </a>
 
-        <a id="download-csv" data-bind="attr: {'href': '/${ app_name }/download/' + $root.design.history.id() + '/csv'}" href="javascript:void(0)" title="${_('Download the results in CSV format')}" rel="tooltip"
+        ## Tricks for not triggering the closing of the query on download
+        <a id="download-csv" data-bind="attr: {'href': '/${ app_name }/download/' + $root.design.history.id() + '/csv'}, event: { mouseover: function(){ window.onbeforeunload = null; }, mouseout: function() { window.onbeforeunload = $(window).data('beforeunload'); } }"" href="javascript:void(0)" title="${_('Download the results in CSV format')}" rel="tooltip"
           class="view-query-results download hide pull-right"><h4><i class="hfo hfo-file-csv"></i></h4>
         </a>
 
-        <a id="download-excel" data-bind="attr: {'href': '/${ app_name }/download/' + $root.design.history.id() + '/xls'}" href="javascript:void(0)" title="${_('Download the results in XLS format')}" rel="tooltip"
+        <a id="download-excel" data-bind="attr: {'href': '/${ app_name }/download/' + $root.design.history.id() + '/xls'}, event: { mouseover: function(){ window.onbeforeunload = null; }, mouseout: function() { window.onbeforeunload = $(window).data('beforeunload'); } }" href="javascript:void(0)" title="${_('Download the results in XLS format')}" rel="tooltip"
           class="view-query-results download hide pull-right"><h4><i class="hfo hfo-file-xls"></i></h4></a>
         <!-- /ko -->
         <a href="#clearHistoryModal" title="${_('Clear the query history')}" rel="tooltip" class="clear-queries pull-right" data-toggle="modal"><h4><i class="fa fa-calendar-times-o"></i></h4></a>
@@ -732,48 +737,6 @@ ${ layout.menubar(section='query') }
 </div>
 
 
-<div id="tableAnalysis" class="popover mega-popover right">
-  <div class="arrow"></div>
-  <h3 class="popover-title" style="text-align: left">
-    <a class="pull-right pointer close-popover" style="margin-left: 8px"><i class="fa fa-times"></i></a>
-    <a class="pull-right pointer stats-refresh" style="margin-left: 8px"><i class="fa fa-refresh"></i></a>
-    <span class="pull-right stats-warning muted" rel="tooltip" data-placement="top" title="${ _('The column stats for this table are not accurate') }" style="margin-left: 8px"><i class="fa fa-exclamation-triangle"></i></span>
-    <strong class="table-name"></strong> ${ _(' table analysis') }
-  </h3>
-  <div class="popover-content">
-    <div id="tableAnalysisStats">
-      <div class="content"></div>
-    </div>
-  </div>
-</div>
-
-<div id="columnAnalysis" class="popover mega-popover right">
-  <div class="arrow"></div>
-  <h3 class="popover-title" style="text-align: left">
-    <a class="pull-right pointer close-popover" style="margin-left: 8px"><i class="fa fa-times"></i></a>
-    <a class="pull-right pointer stats-refresh" style="margin-left: 8px"><i class="fa fa-refresh"></i></a>
-    <strong class="column-name"></strong> ${ _(' column analysis') }
-  </h3>
-  <div class="popover-content">
-    <div class="pull-right hide filter">
-      <input id="columnAnalysisTermsFilter" type="text" placeholder="${ _('Prefix filter...') }"/>
-    </div>
-    <ul class="nav nav-tabs" role="tablist">
-      <li class="active"><a href="#columnAnalysisStats" role="tab" data-toggle="tab">${ _('Stats') }</a></li>
-      <li><a href="#columnAnalysisTerms" role="tab" data-toggle="tab">${ _('Terms') }</a></li>
-    </ul>
-    <div class="tab-content">
-      <div class="tab-pane active" id="columnAnalysisStats" style="text-align: left">
-        <div class="content"></div>
-      </div>
-      <div class="tab-pane" id="columnAnalysisTerms" style="text-align: left">
-        <div class="alert">${ _('There are no terms to be shown') }</div>
-        <div class="content"></div>
-      </div>
-    </div>
-  </div>
-</div>
-
 <div id="clearHistoryModal" class="modal hide fade">
   <div class="modal-header">
     <a href="#" class="close" data-dismiss="modal">&times;</a>
@@ -792,6 +755,7 @@ ${ layout.menubar(section='query') }
 ${ commonshare() | n,unicode }
 
 <script src="${ static('desktop/js/hue.json.js') }" type="text/javascript" charset="utf-8"></script>
+<script src="${ static('desktop/js/jquery.huedatatable.js') }" type="text/javascript" charset="utf-8"></script>
 <script src="${ static('desktop/ext/js/jquery/plugins/jquery-ui-1.10.4.draggable-droppable-sortable.min.js') }" type="text/javascript" charset="utf-8"></script>
 <script src="${ static('desktop/ext/js/routie-0.3.0.min.js') }" type="text/javascript" charset="utf-8"></script>
 <script src="${ static('desktop/ext/js/knockout.min.js') }" type="text/javascript" charset="utf-8"></script>
@@ -804,11 +768,12 @@ ${ commonshare() | n,unicode }
 <script src="${ static('desktop/js/assist/assistHdfsEntry.js') }" type="text/javascript" charset="utf-8"></script>
 <script src="${ static('desktop/js/assist/assistDbEntry.js') }" type="text/javascript" charset="utf-8"></script>
 <script src="${ static('desktop/js/assist/assistDbSource.js') }" type="text/javascript" charset="utf-8"></script>
-<script src="${ static('desktop/js/assist/assistDocuments.js') }" type="text/javascript" charset="utf-8"></script>
+<script src="${ static('desktop/js/fileBrowser/hueFileEntry.js') }" type="text/javascript" charset="utf-8"></script>
 <script src="${ static('desktop/js/autocompleter.js') }" type="text/javascript" charset="utf-8"></script>
 <script src="${ static('notebook/js/notebook.ko.js') }" type="text/javascript" charset="utf-8"></script>
 <script src="${ static('beeswax/js/beeswax.vm.js') }"></script>
 <script src="${ static('desktop/js/share.vm.js') }"></script>
+<script src="${ static('desktop/js/vkbeautify.js') }" type="text/javascript" charset="utf-8"></script>
 
 <script src="${ static('desktop/ext/js/codemirror-3.11.js') }"></script>
 <link rel="stylesheet" href="${ static('desktop/ext/css/codemirror.css') }">
@@ -952,12 +917,16 @@ ${ tableStats.tableStats() }
   }
 
   .fullscreen {
-    position: absolute;
-    top: 70px;
+    position: fixed;
+    top: -16px;
     left: 0;
     width: 100%;
     background-color: #FFFFFF;
-    z-index: 100;
+    z-index: 2000;
+  }
+
+  body.fullscreen {
+    overflow: hidden;
   }
 
   .map {
@@ -966,6 +935,7 @@ ${ tableStats.tableStats() }
 
   #resultTable td, #resultTable th {
     white-space: nowrap;
+    border-right: 1px solid #e5e5e5;
   }
 
   .tab-content {
@@ -1091,7 +1061,6 @@ ${ tableStats.tableStats() }
 <link rel="stylesheet" href="${ static('desktop/ext/css/hue-charts.css') }">
 
 <script src="${ static('desktop/ext/js/jquery/plugins/jquery-fieldselection.js') }" type="text/javascript"></script>
-<script src="${ static('beeswax/js/autocomplete.utils.js') }" type="text/javascript" charset="utf-8"></script>
 
 <link rel="stylesheet" href="${ static('desktop/ext/chosen/chosen.min.css') }">
 <script src="${ static('desktop/ext/chosen/chosen.jquery.min.js') }" type="text/javascript" charset="utf-8"></script>
@@ -1106,7 +1075,7 @@ var leftPanelWidth = $.totalStorage("${app_name}_left_panel_width") != null ? $.
 $(".left-panel").css("width", leftPanelWidth + "px");
 $(".right-panel").css("left", leftPanelWidth + 20 + "px");
 
-var codeMirror, resizeNavigator, dataTable, renderRecent, syncWithHive;
+var codeMirror, dataTable, renderRecent, syncWithHive;
 
 var HIVE_AUTOCOMPLETE_BASE_URL = "${ autocomplete_base_url | n,unicode }";
 var HIVE_AUTOCOMPLETE_FAILS_QUIETLY_ON = [500]; // error codes from beeswax/views.py - autocomplete
@@ -1142,8 +1111,11 @@ var snippet = notebook.newSnippet(snippetType);
 var assistHelper = snippet.getAssistHelper();
 var autocompleter = new Autocompleter({
   snippet: snippet,
-  user: HIVE_AUTOCOMPLETE_USER
+  user: HIVE_AUTOCOMPLETE_USER,
+  oldEditor: true
 });
+
+var totalStorageUserPrefix = assistHelper.getTotalStorageUserPrefix(snippetType);
 
 var escapeOutput = function (str) {
   return $('<span>').text(str).html().trim();
@@ -1181,30 +1153,42 @@ function placeResizePanelHandle() {
 }
 
 function reinitializeTableExtenders() {
-  $("#resultTable").jHueTableExtender({
-     fixedHeader: true,
-     includeNavigator: false
-  });
+  if (viewModel.design.results.columns().length > 0 && viewModel.design.results.columns().length < 500) {
+    $("#resultTable").jHueTableExtender({
+       fixedHeader: true,
+       fixedFirstColumn: true,
+       includeNavigator: false
+    });
+  }
   $("#recentQueries").jHueTableExtender({
      fixedHeader: true,
      includeNavigator: false
   });
 }
-
 var CURRENT_CODEMIRROR_SIZE = 100;
+var INITIAL_CODEMIRROR_SIZE = CURRENT_CODEMIRROR_SIZE;
+var CODEMIRROR_MANUALLY_RESIZED = false;
 var INITIAL_HORIZONTAL_RESIZE_POSITION = -1;
 
 // Navigator, recent queries
 $(document).ready(function () {
   $("#resizePanel a").draggable({
     axis: "y",
+    start: function (e, ui) {
+      CODEMIRROR_MANUALLY_RESIZED = true;
+      draggableHelper($(this), e, ui);
+    },
     drag: function (e, ui) {
       draggableHelper($(this), e, ui);
       $(".jHueTableExtenderClonedContainer").hide();
+      $(".jHueTableExtenderClonedContainerColumn").hide();
+      $(".jHueTableExtenderClonedContainerCell").hide();
     },
     stop: function (e, ui) {
-      $(".jHueTableExtenderClonedContainer").show();
       draggableHelper($(this), e, ui);
+      $(".jHueTableExtenderClonedContainer").show();
+      $(".jHueTableExtenderClonedContainerColumn").show();
+      $(".jHueTableExtenderClonedContainerCell").show();
       reinitializeTableExtenders();
     }
   });
@@ -1219,17 +1203,18 @@ $(document).ready(function () {
   checkForInitialSplitterPosition();
 
   function resizeCodeMirror(el) {
-    CURRENT_CODEMIRROR_SIZE = 100 + (el.position().top - INITIAL_HORIZONTAL_RESIZE_POSITION);
+    CURRENT_CODEMIRROR_SIZE = INITIAL_CODEMIRROR_SIZE + (el.position().top - INITIAL_HORIZONTAL_RESIZE_POSITION);
+    if (CURRENT_CODEMIRROR_SIZE < 100) {
+      CURRENT_CODEMIRROR_SIZE = 100;
+    }
     codeMirror.setSize("99%", CURRENT_CODEMIRROR_SIZE);
   }
 
   function draggableHelper(el, e, ui) {
-    if (el.position().top > INITIAL_HORIZONTAL_RESIZE_POSITION) {
-      resizeCodeMirror(el);
-    }
-    if (ui.position.top < INITIAL_HORIZONTAL_RESIZE_POSITION) {
-      ui.position.top = INITIAL_HORIZONTAL_RESIZE_POSITION;
-      resizeCodeMirror(el);
+    resizeCodeMirror(el);
+    var minHandlePosition = $('.card-heading.simple').is(':visible') ? 248 : 205;
+    if (ui.position.top < minHandlePosition) {
+      ui.position.top = minHandlePosition;
     }
   }
 
@@ -1314,27 +1299,37 @@ $(document).ready(function () {
     });
   });
 
-  resizeNavigator = function () {
-    $(".resizer").css("height", $(window).height() + "px");
-    $("#navigator .card").css("height", $(window).height() + "px");
-    $(".table-container").css("max-height", ($(window).height() - 180) + "px").css("overflow-y", "auto");
+  var lastWindowHeight = -1
+  var resizeNavigator = function () {
+    var newHeight = $(window).height();
+    if (lastWindowHeight !== newHeight) {
+      $(".resizer").css("height", (newHeight - 90) + "px");
+      $("#navigator .card").css("height", (newHeight - 130) + "px").css("overflow-y", "hidden");
+      lastWindowHeight = newHeight;
+    }
   };
 
-  $("#expandResults").on("click", function(){
+  resizeNavigator();
+  $(window).on("scroll", resizeNavigator);
+  $(window).on("resize", resizeNavigator);
+  window.setInterval(resizeNavigator, 500);
+
+  $(document).on("click", "#expandResults", function(){
     $("#resultTablejHueTableExtenderClonedContainer").remove();
+    $("#resultTablejHueTableExtenderClonedContainerColumn").remove();
+    $("#resultTablejHueTableExtenderClonedContainerCell").remove();
     if ($(this).find("i").hasClass("fa-expand")){
       $(this).find("i").removeClass("fa-expand").addClass("fa-compress");
-      $(this).parent().parent().addClass("fullscreen");
+      $(this).parents('.resultsContainer').addClass("fullscreen");
+      $('body').addClass("fullscreen");
     }
     else {
       $(this).find("i").addClass("fa-expand").removeClass("fa-compress");
-      $(this).parent().parent().removeClass("fullscreen");
+      $(this).parents('.resultsContainer').removeClass("fullscreen");
+      $('body').removeClass("fullscreen");
     }
-    reinitializeTable();
+    window.setTimeout(reinitializeTable, 200);
   });
-
-  resizeNavigator();
-  window.setTimeout(resizeNavigator, 200);
 
   $(document).on("click", ".column-selector", function () {
     var _t = $("#resultTable");
@@ -1347,23 +1342,15 @@ $(document).ready(function () {
     $("a[href='#results']").click();
   });
 
-  $(document).on("click", "#tableAnalysis .close-popover", function () {
-    $("#tableAnalysis").hide();
-  });
-
-  $(document).on("click", "#columnAnalysis .close-popover", function () {
-    $("#columnAnalysis").hide();
-  });
-
   $(document).on("clear.history", function() {
     renderRecent();
     $("#clearHistoryModal").modal("hide");
   });
 
   $(document).on("shown", "a[data-toggle='tab']:not(.sidetab)", function (e) {
-    if ($(e.target).attr("href") == "#log") {
+    if ($(e.target).attr("href") == "#log" || $(e.target).attr("href") == "#query" ) {
       logsAtEnd = true;
-      window.setTimeout(resizeLogs, 150);
+      window.setTimeout(resizeLogs, 100);
     }
     if ($(e.target).attr("href") == "#results" && $(e.relatedTarget).attr("href") == "#columns") {
       if ($("#resultTable .columnSelected").length > 0) {
@@ -1377,23 +1364,14 @@ $(document).ready(function () {
     if ($(e.target).attr("href") == "#results" || $(e.target).attr("href") == "#recentTab") {
       reinitializeTableExtenders();
     }
-    if ($(e.target).attr("href") != "#results"){
+    if ($(e.target).attr("href") != "#results" && $(e.target).attr("href") != "#columns"){
       $($(e.target).attr("href")).css('height', 'auto');
       if ($(e.target).attr("href") == "#chart") {
         logGA('results/chart');
         predictGraph();
       }
-      if ($(e.target).attr("href") == "#resultTab") {
-        reinitializeTable();
-      }
     } else {
       reinitializeTable();
-    }
-    if ($(e.target).attr("href") == "#columnAnalysisTerms") {
-      $("#columnAnalysis .filter").removeClass("hide");
-    }
-    if ($(e.target).attr("href") == "#columnAnalysisStats") {
-      $("#columnAnalysis .filter").addClass("hide");
     }
     return e;
   });
@@ -1412,21 +1390,22 @@ function getHighlightedQuery() {
 
 function reinitializeTable(max) {
   var _max = max || 10;
+  var _heightCorrection = $('body').hasClass('fullscreen') ? 85 : 150;
 
   function fn(){
     var container = $($("a[data-toggle='tab']:not(.sidetab)").parent(".active").find("a").attr("href"));
     if ($("#results .dataTables_wrapper").height() > 0) {
 
       $("#results .dataTables_wrapper").jHueTableScroller({
-        minHeight: $(window).height() - 150,
+        minHeight: $(window).height() - _heightCorrection,
         heightAfterCorrection: 0
       });
       $("#recentTab .dataTables_wrapper").jHueTableScroller({
-        minHeight: $(window).height() - 150,
+        minHeight: $(window).height() - _heightCorrection,
         heightAfterCorrection: 0
       });
       reinitializeTableExtenders();
-      container.height($(window).height() - 150);
+      container.height($(window).height() - _heightCorrection);
       $("#results .dataTables_wrapper").jHueScrollUp();
     } else if ($('#resultEmpty').height() > 0) {
       container.height($('#resultEmpty').height());
@@ -1457,22 +1436,6 @@ $(document).ready(function () {
   });
 
   initQueryField();
-
-  var resizeTimeout = -1;
-  var winWidth = $(window).width();
-  var winHeight = $(window).height();
-
-  $(window).on("resize", function () {
-    window.clearTimeout(resizeTimeout);
-    resizeTimeout = window.setTimeout(function () {
-      // prevents endless loop in IE8
-      if (winWidth != $(window).width() || winHeight != $(window).height()) {
-        resizeNavigator();
-        winWidth = $(window).width();
-        winHeight = $(window).height();
-      }
-    }, 200);
-  });
 
   function initQueryField() {
     if ($("#queryField").val() == "") {
@@ -1617,6 +1580,7 @@ $(document).ready(function () {
     value: queryEditor.value,
     readOnly: false,
     lineNumbers: true,
+    viewportMargin: Infinity,
     % if app_name == 'impala':
     mode: "text/x-impalaql",
     % else:
@@ -1631,6 +1595,9 @@ $(document).ready(function () {
       }
     },
     onKeyEvent: function (e, s) {
+      if (s.type == "keydown" && s.keyCode == 73 && (s.altKey || s.ctrlKey || s.metaKey)) {
+        formatQuery();
+      }
       if (s.type == "keyup") {
         if (s.keyCode == 190) {
           var _statement = getStatementAtCursor().statement;
@@ -1690,9 +1657,9 @@ $(document).ready(function () {
   });
 
   % if not (design and design.id) and not ( query_history and query_history.id ):
-    if ($.totalStorage(hac_getTotalStorageUserPrefix() + "${app_name}_temp_query") != null && $.totalStorage(hac_getTotalStorageUserPrefix() + "${app_name}_temp_query") != "") {
+    if ($.totalStorage(totalStorageUserPrefix + "${app_name}_temp_query") != null && $.totalStorage(totalStorageUserPrefix + "${app_name}_temp_query") != "") {
       viewModel.queryEditorBlank(true);
-      codeMirror.setValue($.totalStorage(hac_getTotalStorageUserPrefix() + "${app_name}_temp_query"));
+      codeMirror.setValue($.totalStorage(totalStorageUserPrefix + "${app_name}_temp_query"));
     }
   % endif
 
@@ -1700,12 +1667,18 @@ $(document).ready(function () {
     $(document.body).off("contextmenu");
   });
 
-  codeMirror.on("update", function () {
-    if (CURRENT_CODEMIRROR_SIZE == 100 && codeMirror.lineCount() > 7){
-      CURRENT_CODEMIRROR_SIZE = 270;
-      codeMirror.setSize("99%", CURRENT_CODEMIRROR_SIZE);
-      reinitializeTableExtenders();
-    }
+  codeMirror.on("change", function () {
+    window.setTimeout(function () {
+      if (!CODEMIRROR_MANUALLY_RESIZED && $('.CodeMirror').height() < 270 && codeMirror.lineCount() > 7) {
+        CURRENT_CODEMIRROR_SIZE = 270;
+        if ($('.card-heading.simple').is(':visible')) {
+          INITIAL_CODEMIRROR_SIZE = 270;
+          INITIAL_HORIZONTAL_RESIZE_POSITION = 418;
+        }
+        codeMirror.setSize("99%", CURRENT_CODEMIRROR_SIZE);
+        reinitializeTableExtenders();
+      }
+    }, 200);
   });
 
   $("#download-excel").click(function () {
@@ -1902,6 +1875,9 @@ $(document).ready(function () {
   $("a[href='#log']").on("shown", function () {
     resizeLogs();
   });
+  $("a[href='#query']").on("shown", function () {
+    resizeLogs();
+  });
 
   % if app_name == 'impala':
   $("a[href='#sessionTab']").on("shown", function () {
@@ -1991,6 +1967,11 @@ function resizeLogs() {
     $("#log").height(_height - 10);
     $("#log pre:eq(1)").css("overflow", "auto").height(_height - 50);
   }
+  if ($("#query pre:eq(1)").length > 0) {
+    var _height = Math.max($(window).height() - $("#query pre:eq(1)").offset().top, 250);
+    $("#query").height(_height - 10);
+    $("#query pre:eq(1)").css("overflow", "auto").height(_height - 50);
+  }
 }
 
 // Result Datatable
@@ -2054,42 +2035,59 @@ function addResults(viewModel, dataTable, startRow, nextRow) {
 
 function resultsTable(e, data) {
   $("#results .dataTables_wrapper").animate({opacity: '1'}, 50);
-  $.totalStorage(hac_getTotalStorageUserPrefix() + "${app_name}_temp_query", null);
+  $.totalStorage(totalStorageUserPrefix + "${app_name}_temp_query", null);
   if (viewModel.design.results.columns().length > 0) {
     if (!dataTable) {
-      dataTable = $("#resultTable").dataTable({
-        "bPaginate": false,
-        "bLengthChange": false,
-        "bInfo": false,
-        "bDestroy": true,
-        "bAutoWidth": false,
-        "oLanguage": {
-          "sEmptyTable": "${_('No data available')}",
-          "sZeroRecords": "${_('No matching records')}"
-        },
-        "fnDrawCallback": function (oSettings) {
-          reinitializeTableExtenders();
-          if (firstFnDrawcallback) {
-            firstFnDrawcallback = false;
-            window.setTimeout(reinitializeTable, 100);
-          }
-        },
-        "aoColumnDefs": [
-          {
-            "sType": "numeric",
-            "aTargets": [ "sort-numeric" ]
+      if (viewModel.design.results.columns().length < 500) {
+        dataTable = $("#resultTable").dataTable({
+          "bPaginate": false,
+          "bLengthChange": false,
+          "bInfo": false,
+          "bDestroy": true,
+          "bAutoWidth": false,
+          "oLanguage": {
+            "sEmptyTable": "${_('No data available')}",
+            "sZeroRecords": "${_('No matching records')}"
           },
-          {
-            "sType": "string",
-            "aTargets": [ "sort-string" ]
+          "fnDrawCallback": function (oSettings) {
+            reinitializeTableExtenders();
+            if (firstFnDrawcallback) {
+              firstFnDrawcallback = false;
+              window.setTimeout(reinitializeTable, 100);
+            }
           },
-          {
-            "sType": "date",
-            "aTargets": [ "sort-date" ]
+          "aoColumnDefs": [
+            {
+              "sType": "numeric",
+              "aTargets": [ "sort-numeric" ]
+            },
+            {
+              "sType": "string",
+              "aTargets": [ "sort-string" ]
+            },
+            {
+              "sType": "date",
+              "aTargets": [ "sort-date" ]
+            }
+          ]
+        });
+        $(".dataTables_filter").hide();
+      }
+      else {
+        dataTable = $("#resultTable").hueDataTable({
+          "oLanguage": {
+            "sEmptyTable": "${_('No data available')}",
+            "sZeroRecords": "${_('No matching records')}"
+          },
+          "fnDrawCallback": function (oSettings) {
+            reinitializeTableExtenders();
+            if (firstFnDrawcallback) {
+              firstFnDrawcallback = false;
+              window.setTimeout(reinitializeTable, 100);
+            }
           }
-        ]
-      });
-      $(".dataTables_filter").hide();
+        });
+      }
       reinitializeTable();
       var _options = '<option value="-1">${ _("Please select a column")}</option>';
       $(viewModel.design.results.columns()).each(function(cnt, item){
@@ -2122,6 +2120,8 @@ var errorWidgets = [];
 
 function clearErrorWidgets() {
   $(".jHueTableExtenderClonedContainer").hide();
+  $(".jHueTableExtenderClonedContainerColumn").hide();
+  $(".jHueTableExtenderClonedContainerCell").hide();
   $.each(errorWidgets, function(index, errorWidget) {
     errorWidget.clear();
   });
@@ -2225,6 +2225,8 @@ function tryExecuteQuery() {
   viewModel.scrollNotWorking(true);
   $("#results .dataTables_wrapper").off("scroll", datatableScroll);
   $(".jHueTableExtenderClonedContainer").hide();
+  $(".jHueTableExtenderClonedContainerColumn").hide();
+  $(".jHueTableExtenderClonedContainerCell").hide();
   $(".tooltip").remove();
   var query = getHighlightedQuery() || codeMirror.getValue();
   viewModel.design.query.value(query);
@@ -2282,6 +2284,18 @@ function tryExplainQuery() {
   logGA('query/explain');
 }
 
+function formatQuery() {
+  if (vkbeautify) {
+    if (codeMirror.getSelection() != '') {
+      codeMirror.replaceSelection(vkbeautify.sql(codeMirror.getSelection(), 2));
+    }
+    else {
+      codeMirror.setValue(vkbeautify.sql(codeMirror.getValue(), 2));
+    }
+    viewModel.design.query.value(codeMirror.getValue());
+  }
+}
+
 function tryExplainParameterizedQuery() {
   $(".tooltip").remove();
   viewModel.explainQuery();
@@ -2294,7 +2308,7 @@ function tryCancelQuery() {
 }
 
 function createNewQuery() {
-  $.totalStorage(hac_getTotalStorageUserPrefix() + "${app_name}_temp_query", null);
+  $.totalStorage(totalStorageUserPrefix + "${app_name}_temp_query", null);
   location.href="${ url(app_name + ':execute_query') }";
 }
 
@@ -2483,23 +2497,15 @@ $(document).ready(function () {
   $(document).on('execute.query', function() {
     viewModel.closeQuery();
   });
-
-  // Tricks for not triggering the closing of the query on download
-  $("a.download").hover(function(){
-      window.onbeforeunload = null;
-    },function() {
-      window.onbeforeunload = $(window).data('beforeunload');
-    }
-  );
 });
 
 // Close the query when leaving the page, backup for later when disabling the close before downloading results.
 window.onbeforeunload = function(e) {
   viewModel.closeQuery();
 };
-$(window).data('beforeunload', window.onbeforeunload);
-
 % endif
+
+$(window).data('beforeunload', window.onbeforeunload);
 
 $(".folderChooser:not(:has(~ button))").after(getFolderBrowseButton($(".folderChooser:not(:has(~ button))"), true));
 $(".pathChooser:not(:has(~ button))").after(getPathBrowseButton($(".pathChooser:not(:has(~ button))"), true));
@@ -2693,7 +2699,7 @@ function cacheQueryTextEvents() {
     if (typeof codeMirror != "undefined") {
       codeMirror.on("change", function () {
         $(".query").val(codeMirror.getValue());
-        $.totalStorage(hac_getTotalStorageUserPrefix() + "${app_name}_temp_query", codeMirror.getValue());
+        $.totalStorage(totalStorageUserPrefix + "${app_name}_temp_query", codeMirror.getValue());
       });
       window.clearInterval(_waitForCodemirrorInit);
     }
@@ -2772,8 +2778,8 @@ viewModel.design.fileResources.values.subscribe(function() {
     }
     else if (viewModel.design.results.errors().length == 0) {
       window.setTimeout(function(){
-        window.location.href = "${request.GET['on_success_url']}";
-      }, 200);
+        window.location.href = successUrl + (successUrl.indexOf("?") > -1 ? "&" : "?") + "refresh=true";
+      }, 1000);
     }
   });
 % elif action == 'editor-results':

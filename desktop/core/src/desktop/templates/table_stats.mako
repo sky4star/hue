@@ -27,7 +27,7 @@ from desktop.views import _ko
       <!-- ko if: statRows().length -->
       <table class="table table-striped">
         <tbody data-bind="foreach: statRows">
-          <tr><th data-bind="text: data_type"></th><td data-bind="text: comment"></td></tr>
+          <tr><th data-bind="text: data_type, style:{'border-top-color': $index() == 0 ? '#ffffff' : '#e5e5e5'}" style="background-color: #FFF"></th><td data-bind="text: comment, style:{'border-top-color': $index() == 0 ? '#ffffff' : '#e5e5e5'}" style="background-color: #FFF"></td></tr>
         </tbody>
       </table>
       <!-- /ko -->
@@ -38,10 +38,6 @@ from desktop.views import _ko
     <div class="pull-right filter" data-bind="visible: termsTabActive" style="display:none;">
       <input type="text" data-bind="textInput: prefixFilter" placeholder="${ _('Prefix filter...') }"/>
     </div>
-    <ul class="nav nav-tabs" role="tablist" style="margin-bottom: 0">
-      <li data-bind="click: function() { termsTabActive(false) }" class="active"><a href="#columnAnalysisStats" role="tab" data-toggle="tab">${ _('Stats') }</a></li>
-      <li data-bind="click: function() { termsTabActive(true) }"><a href="#columnAnalysisTerms" role="tab" data-toggle="tab">${ _('Terms') }</a></li>
-    </ul>
     <div class="tab-content" style="border: none; margin-top: 10px">
       <div class="tab-pane active" id="columnAnalysisStats" style="text-align: left">
         <div class="alert" data-bind="visible: isComplexType" style="margin: 5px">${ _('Column stats are currently not supported for columns of type:') } <span data-bind="text: type"></span></div>

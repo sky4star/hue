@@ -22,8 +22,10 @@ import time
 from django.utils.translation import ugettext as _
 
 from desktop.lib.django_util import JsonResponse
+from desktop.lib.exceptions_renderable import PopupException
 from beeswax.api import autocomplete
 from hadoop.cluster import get_defaultfs
+from libsolr.api import SolrApi
 
 from libsentry.api2 import get_api
 from libsentry.sentry_site import get_sentry_server_admin_groups
@@ -32,25 +34,64 @@ from libsentry.sentry_site import get_sentry_server_admin_groups
 LOG = logging.getLogger(__name__)
 
 
-def fetch_hive_path(request):
+def fetch_authorizables(request):
+  if request.GET['component'] == 'solr':
+    resp = JsonResponse(_fetch_collections(request))
+  elif request.GET['component'] == 'hive':
+    resp = _fetch_hive_path(request)
+
+  return resp
+
+
+def _fetch_hive_path(request):
   path = request.GET['path']
 
   database = None
   table = None
+  column = None
+
   if path:
     database = path
   if '/' in path:
-    database, table = path.split('/')
+    database, table = path.split('/', 1)
+    if '.' in table:
+      table, column  = table.split('.', 1)
 
-  resp = autocomplete(request, database, table)
+  resp = autocomplete(request, database, table, column)
 
   if database and request.GET['doas'] != request.user.username:
     request.GET = request.GET.copy()
     request.GET['doas'] = request.GET['doas']
 
-    resp = autocomplete(request, database, table)
+    resp = autocomplete(request, database, table, column)
 
   return resp
+
+
+def _fetch_collections(request):
+  from search.conf import SOLR_URL
+
+  path = request.GET['path']
+  item = None
+  name = None
+
+  if path:
+    item = path
+  if '/' in path:
+    item, name = path.split('/')
+
+  api = SolrApi(SOLR_URL.get(), request.user)
+
+  if not item:
+    return {"databases": ["collections", "configs"]}
+  elif item and name:
+    return {"authorizable_link": "/indexer/#edit/%s" % name, "extended_columns": [], "columns": [], "partition_keys": []}
+  elif item == 'collections':
+    return {"tables_meta": [{"comment": None, "type": "Table", "name": col} for col in api.collections2()]}
+  elif item == 'configs':
+    return {"tables_meta": [{"comment": None, "type": "Table", "name": conf} for conf in api.configs()]}
+  else:
+    raise PopupException(_('Authorizable %s could not be retrieved') % path)
 
 
 def list_sentry_roles_by_group(request):
@@ -82,14 +123,14 @@ def list_sentry_roles_by_group(request):
 def list_sentry_privileges_by_role(request):
   result = {'status': -1, 'message': 'Error'}
 
-  try:    
+  try:
     serviceName = request.POST['server']
     component = request.POST['component']
     roleName = request.POST['roleName']
 
     sentry_privileges = get_api(request.user, component).list_sentry_privileges_by_role(serviceName, roleName)
 
-    result['sentry_privileges'] = sorted(sentry_privileges, key=lambda privilege: '%s.%s.%s.%s' % (privilege['server'], privilege['database'], privilege['table'], privilege['URI']))
+    result['sentry_privileges'] = sorted(sentry_privileges, key=lambda privilege: '.'.join([auth['name'] for auth in privilege['authorizables']]))
     result['message'] = ''
     result['status'] = 0
   except Exception, e:
@@ -102,14 +143,12 @@ def list_sentry_privileges_by_role(request):
 
 def _to_sentry_privilege(privilege):
   return {
-      'privilegeScope': privilege['privilegeScope'],
-      'serverName': privilege['serverName'],
-      'dbName': privilege['dbName'],
-      'tableName': privilege['tableName'],
-      'columnName': privilege['columnName'],
-      'URI': _massage_uri(privilege['URI']),
+      'component': privilege['component'],
+      'serviceName': privilege['serverName'],
+      'authorizables': [{'type': auth['type'], 'name': auth['name_']} for auth in privilege['authorizables']], # TODO URI {'type': 'URI', 'name': _massage_uri('/path')}
       'action': privilege['action'],
       'createTime': privilege['timestamp'],
+      'grantorPrincipal': privilege['grantorPrincipal'],
       'grantOption': 1 if privilege['grantOption'] else 0,
   }
 
@@ -171,7 +210,7 @@ def create_role(request):
 
   try:
     role = json.loads(request.POST['role'])
-    component = json.loads(request.POST['component'])
+    component = request.POST['component']
 
     api = get_api(request.user, component)
 
@@ -225,21 +264,21 @@ def save_privileges(request):
 
   try:
     role = json.loads(request.POST['role'])
-    component = json.loads(request.POST['component'])
+    component = request.POST['component']
 
     new_privileges = [privilege for privilege in role['privilegesChanged'] if privilege['status'] == 'new']
     result['privileges'] = _hive_add_privileges(request.user, role, new_privileges, component)
 
     deleted_privileges = [privilege for privilege in role['privilegesChanged'] if privilege['status'] == 'deleted']
     for privilege in deleted_privileges:
-      _drop_sentry_privilege(request.user, role, privilege)
+      _drop_sentry_privilege(request.user, role, privilege, component)
 
     modified_privileges = [privilege for privilege in role['privilegesChanged'] if privilege['status'] == 'modified']
     old_privileges_ids = [privilege['id'] for privilege in modified_privileges]
     _hive_add_privileges(request.user, role, modified_privileges, component)
     for privilege in role['originalPrivileges']:
       if privilege['id'] in old_privileges_ids:
-        _drop_sentry_privilege(request.user, role, privilege)
+        _drop_sentry_privilege(request.user, role, privilege, component)
 
     result['message'] = _('Privileges updated')
     result['status'] = 0
@@ -257,7 +296,7 @@ def grant_privilege(request):
   try:
     roleName = json.loads(request.POST['roleName'])
     privilege = json.loads(request.POST['privilege'])
-    component = json.loads(request.POST['component'])
+    component = request.POST['component']
 
     result['privileges'] = _hive_add_privileges(request.user, {'name': roleName}, [privilege], component)
 
@@ -276,7 +315,7 @@ def create_sentry_role(request):
 
   try:
     roleName = request.POST['roleName']
-    component = json.loads(request.POST['component'])
+    component = request.POST['component']
 
     get_api(request.user, component).create_sentry_role(roleName)
     result['message'] = _('Role and privileges created.')
@@ -368,7 +407,7 @@ def bulk_add_privileges(request):
     privileges = json.loads(request.POST['privileges'])
     checkedPaths = json.loads(request.POST['checkedPaths'])
     authorizableHierarchy = json.loads(request.POST['authorizableHierarchy'])
-    component = json.loads(request.POST['component'])
+    component = request.POST['component']
 
     privileges = [privilege for privilege in privileges if privilege['status'] == '']
 

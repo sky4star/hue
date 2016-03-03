@@ -18,6 +18,11 @@
 from desktop import conf
 from desktop.lib.i18n import smart_unicode
 from django.utils.translation import ugettext as _
+
+home_url = url('desktop.views.home')
+from desktop.conf import USE_NEW_EDITOR
+if USE_NEW_EDITOR.get():
+  home_url = url('desktop.views.home2')
 %>
 
 <%def name="is_selected(selected)">
@@ -53,6 +58,7 @@ from django.utils.translation import ugettext as _
   <link href="${ static('desktop/ext/css/font-awesome.min.css') }" rel="stylesheet">
   <link href="${ static('desktop/css/hue3.css') }" rel="stylesheet">
   <link href="${ static('desktop/ext/css/fileuploader.css') }" rel="stylesheet">
+  <link href="${ static('desktop/css/perfect-scrollbar.min.css') }" rel="stylesheet">
 
   <style type="text/css">
     % if conf.CUSTOM.BANNER_TOP_HTML.get():
@@ -188,6 +194,8 @@ from django.utils.translation import ugettext as _
   <script src="${ static('desktop/ext/js/jquery/plugins/jquery.total-storage.min.js') }"></script>
   <script src="${ static('desktop/ext/js/jquery/plugins/jquery.placeholder.min.js') }"></script>
   <script src="${ static('desktop/ext/js/jquery/plugins/jquery.dataTables.1.8.2.min.js') }"></script>
+  <script src="${ static('desktop/js/perfect-scrollbar.jquery.min.js') }"></script>
+  <script src="${ static('desktop/ext/js/jquery/plugins/floatlabels.min.js') }"></script>
   <script src="${ static('desktop/js/jquery.datatables.sorting.js') }"></script>
   <script src="${ static('desktop/ext/js/bootstrap.min.js') }"></script>
   <script src="${ static('desktop/ext/js/bootstrap-better-typeahead.min.js') }"></script>
@@ -204,6 +212,9 @@ from django.utils.translation import ugettext as _
     }
 
     $.fn.dataTableExt.sErrMode = "throw";
+
+    // sets global assistHelper TTL
+    $.totalStorage('hue.cacheable.ttl', ${conf.CUSTOM.CACHEABLE_TTL.get()});
 
     $(document).ready(function () {
       // forces IE's ajax calls not to cache
@@ -376,7 +387,7 @@ from django.utils.translation import ugettext as _
     % endif
     <li class="dropdown">
       <a title="${ _('Administration') }" rel="navigator-tooltip" href="index.html#" data-toggle="dropdown" class="dropdown-toggle"><i class="fa fa-cogs"></i>&nbsp;<span class="hideable">${user.username}&nbsp;</span><b class="caret"></b></a>
-      <ul class="dropdown-menu">
+      <ul class="dropdown-menu pull-right">
         <li>
           <a href="${ url('useradmin.views.edit_user', username=user.username) }"><i class="fa fa-key"></i>&nbsp;&nbsp;
             % if is_ldap_setup:
@@ -407,7 +418,7 @@ from django.utils.translation import ugettext as _
     <a class="brand nav-tooltip pull-left" title="${_('About Hue')}" rel="navigator-tooltip" href="/about"><img src="${ static('desktop/art/hue-logo-mini-white.png') }" data-orig="${ static('desktop/art/hue-logo-mini-white.png') }" data-hover="${ static('desktop/art/hue-logo-mini-white-hover.png') }" /></a>
     % if user.is_authenticated() and section != 'login':
      <ul class="nav nav-pills pull-left">
-       <li><a title="${_('My documents')}" rel="navigator-tooltip" href="${ url('desktop.views.home') }" style="padding-bottom:2px!important"><i class="fa fa-home" style="font-size: 19px"></i></a></li>
+       <li><a title="${_('My documents')}" rel="navigator-tooltip" href="${ home_url }" style="padding-bottom:2px!important"><i class="fa fa-home" style="font-size: 19px"></i></a></li>
        <%
          query_apps = count_apps(apps, ['beeswax', 'impala', 'rdbms', 'pig', 'jobsub', 'spark']);
        %>
@@ -417,24 +428,34 @@ from django.utils.translation import ugettext as _
          <ul role="menu" class="dropdown-menu">
            % if 'beeswax' in apps:
              <%
-               from beeswax.conf import USE_NEW_EDITOR
+               from desktop.conf import USE_NEW_EDITOR
              %>
-             <li><a href="/${apps['beeswax'].display_name}"><img src="${ static(apps['beeswax'].icon_path) }" class="app-icon"/> ${_('Hive')}</a></li>
              % if USE_NEW_EDITOR.get():
-             <li><a href="${ url('notebook:editor') }?type=hive"><img src="${ static(apps['beeswax'].icon_path) }" class="app-icon"/> ${_('New Hive')}</a></li>
+             <li><a href="${ url('notebook:editor') }?type=hive"><img src="${ static(apps['beeswax'].icon_path) }" class="app-icon"/> ${_('Hive')}</a></li>
+             % else:
+             <li><a href="/${apps['beeswax'].display_name}"><img src="${ static(apps['beeswax'].icon_path) }" class="app-icon"/> ${_('Hive')}</a></li>
              % endif
            % endif
            % if 'impala' in apps:
-             <li><a href="/${apps['impala'].display_name}"><img src="${ static(apps['impala'].icon_path) }" class="app-icon"/> ${_('Impala')}</a></li>
              % if USE_NEW_EDITOR.get(): ## impala requires beeswax anyway
-             <li><a href="${ url('notebook:editor') }?type=impala"><img src="${ static(apps['impala'].icon_path) }" class="app-icon"/> ${_('New Impala')}</a></li>
+             <li><a href="${ url('notebook:editor') }?type=impala"><img src="${ static(apps['impala'].icon_path) }" class="app-icon"/> ${_('Impala')}</a></li>
+             % else:
+             <li><a href="/${apps['impala'].display_name}"><img src="${ static(apps['impala'].icon_path) }" class="app-icon"/> ${_('Impala')}</a></li>
              % endif
            % endif
            % if 'rdbms' in apps:
-            <li><a href="/${apps['rdbms'].display_name}"><img src="${ static(apps['rdbms'].icon_path) }" class="app-icon"/> ${_('DB Query')}</a></li>
+             % if USE_NEW_EDITOR.get():
+             <li><a href="/${apps['rdbms'].display_name}"><img src="${ static(apps['rdbms'].icon_path) }" class="app-icon"/> ${_('DB Query')}</a></li>
+             % else:
+             <li><a href="/${apps['rdbms'].display_name}"><img src="${ static(apps['rdbms'].icon_path) }" class="app-icon"/> ${_('DB Query')}</a></li>
+             % endif
            % endif
            % if 'pig' in apps:
+             % if USE_NEW_EDITOR.get() and False:
+             <li><a href="${ url('notebook:editor') }?type=pig"><img src="${ static(apps['pig'].icon_path) }" class="app-icon"/> ${_('Pig')}</a></li>
+             % else:
              <li><a href="/${apps['pig'].display_name}"><img src="${ static(apps['pig'].icon_path) }" class="app-icon"/> ${_('Pig')}</a></li>
+             % endif
            % endif
            % if 'jobsub' in apps:
              <li><a href="/${apps['jobsub'].display_name}"><img src="${ static(apps['jobsub'].icon_path) }" class="app-icon"/> ${_('Job Designer')}</a></li>
@@ -444,7 +465,11 @@ from django.utils.translation import ugettext as _
        % elif query_apps[1] == 1:
           <li><a href="/${apps[query_apps[0]].display_name}">${apps[query_apps[0]].nice_name}</a></li>
        % endif
-       % if 'spark' in apps:
+       % if 'beeswax' in apps:
+        <%
+          from desktop.conf import USE_NEW_EDITOR
+        %>
+        % if USE_NEW_EDITOR.get():
          <% from desktop.models import Document2, Document %>
          <% notebooks = [d.content_object.to_dict() for d in Document.objects.get_docs(user, Document2, extra='notebook') if not d.content_object.is_history] %>
          % if not notebooks:
@@ -469,8 +494,9 @@ from django.utils.translation import ugettext as _
                % endfor
              </ul>
            </li>
-         % endif
-       % endif
+          % endif
+        % endif
+      % endif
        <%
          data_apps = count_apps(apps, ['metastore', 'hbase', 'sqoop', 'zookeeper']);
        %>
@@ -566,13 +592,17 @@ from django.utils.translation import ugettext as _
          % endif
        % endif
        % if 'security' in apps:
-         <% from security.conf import LATEST %>
+         <% from security.conf import HIVE_V1, HIVE_V2, SOLR_V2 %>
          <li class="dropdown">
            <a title="${_('Hadoop Security')}" rel="navigator-tooltip" href="#" data-toggle="dropdown" class="dropdown-toggle">Security <b class="caret"></b></a>
            <ul role="menu" class="dropdown-menu">
+             % if HIVE_V1.get():
              <li><a href="${ url('security:hive') }">&nbsp;<img src="/static/metastore/art/icon_metastore_48.png" class="app-icon"></img>&nbsp;&nbsp;${_('Sentry Tables')}</a></li>
-             % if LATEST.get():
+             % endif
+             % if HIVE_V2.get():
              <li><a href="${ url('security:hive2') }">&nbsp;<img src="/static/metastore/art/icon_metastore_48.png" class="app-icon"></img>&nbsp;&nbsp;${_('Sentry Tables v2')}</a></li>
+             % endif
+             % if SOLR_V2.get():
              <li><a href="${ url('security:solr') }">&nbsp;<i class="fa fa-database"></i>&nbsp;&nbsp;${_('Solr Collections')}</a></li>
              % endif
              <li><a href="${ url('security:hdfs') }">&nbsp;<i class="fa fa-file"></i>&nbsp;&nbsp;${_('File ACLs')}</a></li>

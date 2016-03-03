@@ -28,7 +28,6 @@ from django.utils.translation import ugettext as _
 from desktop.lib.rest.resource import Resource
 from desktop.lib.view_util import format_duration_in_millis
 
-from hadoop.conf import YARN_CLUSTERS
 from hadoop.yarn.clients import get_log_client
 
 from jobbrowser.models import format_unixtime_ms
@@ -66,7 +65,12 @@ class Application(object):
       finishTime = int(time.time() * 1000)
     else:
       finishTime = self.finishedTime
-    setattr(self, 'durationInMillis', finishTime - self.startedTime)
+    if self.finishedTime == 0 or self.startedTime == 0:
+      durationInMillis = None
+    else:
+      durationInMillis = finishTime - self.startedTime
+    setattr(self, 'durationInMillis', durationInMillis)
+    setattr(self, 'durationFormatted', durationInMillis and format_duration_in_millis(self.durationInMillis))
     setattr(self, 'startTimeMs', self.startedTime)
     setattr(self, 'startTimeFormatted', format_unixtime_ms(self.startedTime))
     setattr(self, 'finishTimeFormatted', format_unixtime_ms(finishTime))
@@ -74,7 +78,6 @@ class Application(object):
     setattr(self, 'desiredMaps', None)
     setattr(self, 'finishedReduces', None)
     setattr(self, 'desiredReduces', None)
-    setattr(self, 'durationFormatted', format_duration_in_millis(self.durationInMillis))
 
     for attr in ['preemptedResourceVCores', 'vcoreSeconds', 'memorySeconds', 'diagnostics']:
       if not hasattr(self, attr):
@@ -171,8 +174,11 @@ class Job(object):
     setattr(self, 'is_retired', False)
     setattr(self, 'maps_percent_complete', None)
     setattr(self, 'reduces_percent_complete', None)
-    setattr(self, 'duration', self.finishTime - self.startTime)
-    setattr(self, 'durationFormatted', format_duration_in_millis(self.duration))
+    if self.finishTime == 0 or self.startTime == 0:
+      setattr(self, 'duration', None)
+    else:
+      setattr(self, 'duration', self.finishTime - self.startTime)
+    setattr(self, 'durationFormatted', self.duration and format_duration_in_millis(self.duration))
     setattr(self, 'finishTimeFormatted', format_unixtime_ms(self.finishTime))
     setattr(self, 'startTimeFormatted', format_unixtime_ms(self.startTime))
     setattr(self, 'finishedMaps', self.mapsCompleted)
@@ -352,16 +358,10 @@ class Attempt:
     attempt = self.task.job.job_attempts['jobAttempt'][-1]
     log_link = attempt['logsLink']
     # Get MR task logs
-
-    # Don't hack up the urls if they've been migrated to the job history server.
-    for cluster in YARN_CLUSTERS.get().itervalues():
-      if log_link.startswith(cluster.HISTORY_SERVER_API_URL.get()):
-        break
-    else:
-      if self.assignedContainerId:
-        log_link = log_link.replace(attempt['containerId'], self.assignedContainerId)
-      if hasattr(self, 'nodeHttpAddress'):
-        log_link = log_link.replace(attempt['nodeHttpAddress'].split(':')[0], self.nodeHttpAddress.split(':')[0])
+    if self.assignedContainerId:
+      log_link = log_link.replace(attempt['containerId'], self.assignedContainerId)
+    if hasattr(self, 'nodeHttpAddress'):
+      log_link = log_link.replace(attempt['nodeHttpAddress'].split(':')[0], self.nodeHttpAddress.split(':')[0])
 
     for name in ('stdout', 'stderr', 'syslog'):
       link = '/%s/' % name

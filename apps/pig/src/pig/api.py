@@ -69,6 +69,7 @@ class OozieApi(object):
 
   def _create_workflow(self, pig_script, params):
     workflow = Workflow.objects.new_workflow(self.user)
+    workflow.schema_version = 'uri:oozie:workflow:0.5'
     workflow.name = OozieApi.WORKFLOW_NAME
     workflow.is_history = True
     if pig_script.use_hcatalog:
@@ -112,7 +113,7 @@ class OozieApi(object):
           archives.append({"dummy": "", "name": resource['value']})
 
     action = Pig.objects.create(
-        name='pig',
+        name='pig-5760',
         script_path=script_path,
         workflow=workflow,
         node_type='pig',
@@ -122,11 +123,13 @@ class OozieApi(object):
         job_properties=json.dumps(job_properties)
     )
 
+    credentials = []
     if pig_script.use_hcatalog and self.oozie_api.security_enabled:
-      action.credentials.append([{'name': 'hcat', 'value': True}])
-      action.save()
+      credentials.append({'name': 'hcat', 'value': True})
     if pig_script.use_hbase and self.oozie_api.security_enabled:
-      action.credentials.append([{'name': 'hbase', 'value': True}])
+      credentials.append({'name': 'hbase', 'value': True})
+    if credentials:
+      action.credentials = credentials # Note, action.credentials is a @setter here
       action.save()
 
     action.add_node(workflow.end)

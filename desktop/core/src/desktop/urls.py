@@ -38,7 +38,7 @@ from django.conf.urls.static import static
 from django.contrib import admin
 
 from desktop import appmanager
-from desktop.conf import METRICS
+from desktop.conf import METRICS, USE_NEW_EDITOR
 
 # Django expects handler404 and handler500 to be defined.
 # django.conf.urls provides them. But we want to override them.
@@ -59,10 +59,20 @@ dynamic_patterns = patterns('desktop.auth.views',
   (r'^login/oauth_authenticated/?$', 'oauth_authenticated'),
 )
 
+
+if USE_NEW_EDITOR.get():
+  dynamic_patterns += patterns('desktop.views',
+    (r'^home$','home2'),
+    (r'^home2$','home')
+  )
+else:
+  dynamic_patterns += patterns('desktop.views',
+    (r'^home$','home'),
+    (r'^home2$','home2')
+  )
+
 dynamic_patterns += patterns('desktop.views',
   (r'^logs$','log_view'),
-  (r'^home$','home'),
-  (r'^home2$','home2'),
   (r'^desktop/dump_config$','dump_config'),
   (r'^desktop/download_logs$','download_log_view'),
   (r'^bootstrap.js$', 'bootstrap'), # unused
@@ -99,17 +109,17 @@ dynamic_patterns += patterns('desktop.api',
 )
 
 dynamic_patterns += patterns('desktop.api2',
-  (r'^desktop/api2/docs/?$', 'get_documents'),
-  (r'^desktop/api2/docs2/?$', 'get_documents2'),
-  (r'^desktop/api2/doc/get$', 'get_document'),
+  (r'^desktop/api2/docs/?$', 'search_documents'),  # search documents for current user
+  (r'^desktop/api2/doc/?$', 'get_document'),  # get doc/dir by path or UUID
 
-  (r'^desktop/api2/doc/move$', 'move_document'),
-  (r'^desktop/api2/doc/mkdir$', 'create_directory'),
-  (r'^desktop/api2/doc/delete$', 'delete_document'),
-  (r'^desktop/api2/doc/share$', 'share_document'),
+  (r'^desktop/api2/doc/move/?$', 'move_document'),
+  (r'^desktop/api2/doc/mkdir/?$', 'create_directory'),
+  (r'^desktop/api2/doc/update/?$', 'update_document'),
+  (r'^desktop/api2/doc/delete/?$', 'delete_document'),
+  (r'^desktop/api2/doc/share/?$', 'share_document'),
 
-  (r'^desktop/api2/doc/export$', 'export_documents'),
-  (r'^desktop/api2/doc/import$', 'import_documents'),
+  (r'^desktop/api2/doc/export/?$', 'export_documents'),
+  (r'^desktop/api2/doc/import/?$', 'import_documents'),
 )
 
 dynamic_patterns += patterns('useradmin.views',

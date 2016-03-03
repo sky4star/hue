@@ -25,6 +25,24 @@ function UUID() {
   return s4() + s4() + '-' + s4() + '-' + s4() + '-' + s4() + '-' + s4() + s4() + s4();
 }
 
+var Authorizable = function (vm, privilege, authorizable) {
+  var self = this;
+
+  self.type = ko.observable(typeof authorizable.type != "undefined" && authorizable.type != null ? authorizable.type : "");
+  self.type.subscribe(function () {
+    if (privilege.status() == '') {
+      privilege.status('modified');
+    }
+    privilege.privilegeScope(getPrivilegeScope());
+  });
+  self.name_ = ko.observable(typeof authorizable.name != "undefined" && authorizable.name != null ? authorizable.name : "");
+  self.name_.subscribe(function () {
+    if (privilege.status() == '') {
+      privilege.status('modified');
+    }
+    privilege.privilegeScope(getPrivilegeScope());
+  });
+}
 
 var Privilege = function (vm, privilege) {
   var self = this;
@@ -39,6 +57,22 @@ var Privilege = function (vm, privilege) {
       self.status('modified');
     }
   });
+  self.component = ko.observable(typeof privilege.component != "undefined" && privilege.component != null ? privilege.component : vm.component());
+  self.authorizables = ko.observableArray();
+  if (typeof privilege.authorizables != "undefined" && privilege.authorizables != null) {
+    self.authorizables(
+      $.map(privilege.authorizables, function(authorizable) {
+        return new Authorizable(vm, privilege, authorizable);
+      })
+    )
+  };
+  self.authorizables.subscribe(function () {
+    if (self.status() == '') {
+      self.status('modified');
+    }
+    self.privilegeScope(getPrivilegeScope());
+  });
+  /**
   self.dbName = ko.observable(typeof privilege.dbName != "undefined" && privilege.dbName != null ? privilege.dbName : "");
   self.dbName.subscribe(function () {
     if (self.status() == '') {
@@ -62,7 +96,7 @@ var Privilege = function (vm, privilege) {
     if (self.status() == '') {
       self.status('modified');
     }
-  });
+  });*/
   self.action = ko.observable(typeof privilege.action != "undefined" && privilege.action != null ? privilege.action : 'SELECT');
   self.action.subscribe(function () {
     if (self.status() == '') {
@@ -70,6 +104,7 @@ var Privilege = function (vm, privilege) {
     }
   });
   self.timestamp = ko.observable(typeof privilege.timestamp != "undefined" && privilege.timestamp != null ? privilege.timestamp : 0);
+  self.grantorPrincipal = ko.observable(typeof privilege.grantorPrincipal != "undefined" && privilege.grantorPrincipal != null ? privilege.grantorPrincipal : vm.user());
   self.grantOption = ko.observable(typeof privilege.grantOption != "undefined" && privilege.grantOption != null ? privilege.grantOption : false);
   self.grantOption.subscribe(function () {
     if (self.status() == '') {
@@ -82,43 +117,62 @@ var Privilege = function (vm, privilege) {
   self.showAdvanced = ko.observable(false);
   self.path = ko.computed({
     read: function () {
-      if (self.columnName().length > 0) {
-        return self.dbName() + "." + self.tableName() + "." + self.columnName();
-      } else if (self.tableName().length > 0) {
-        return self.dbName() + "." + self.tableName();
-      } else {
-        return self.dbName();
-      }
+      var path = $.map(self.authorizables(), function(authorizable) {
+        if (authorizable.name_() !== ''){
+          return authorizable.name_();
+        }
+      }).join(".");
+      return path;
     },
     write: function (value) {
       var _parts = value.split(".");
-      this.dbName(_parts[0]);
-      this.tableName(_parts.length > 1 ? _parts[1] : "");
-      this.columnName(_parts.length > 2 ? _parts[2] : "");
+
+      self.authorizables.removeAll();
+      self.authorizables.push(new Authorizable(vm, self, {type: 'DATABASE', name: _parts[0]}))
+      if (_parts.length > 1) {
+        self.authorizables.push(new Authorizable(vm, self, {type: 'TABLE', name: _parts[1]}))
+      }
+      if (_parts.length > 2) {
+        self.authorizables.push(new Authorizable(vm, self, {type: 'COLUMN', name: _parts[2]}))
+      }
     },
     owner: self
   });
 
-  self.metastorePath = ko.computed(function(){
-    if (self.columnName().length > 0) {
-      return '/metastore/table/' + self.dbName() + "/" + self.tableName() + "#col=" + self.columnName();
-    } else if (self.tableName().length > 0) {
-      return '/metastore/table/' + self.dbName() + "/" + self.tableName();
-    } else if (self.dbName().length > 0) {
-      return '/metastore/tables/' + self.dbName();
-    } else {
-      return '';
+  self.indexerPath = ko.computed(function () {
+    if (self.authorizables()[1] && self.authorizables()[1]['type'] == 'TABLE') {
+      return '/indexer/#edit/' + self.authorizables()[1];
+    }
+    else {
+      return '/indexer/#manage';
     }
   });
 
+  self.metastorePath = ko.computed(function() {
+    var path = '';
+
+    if (self.authorizables()[0] && self.authorizables()[0]['type'] == 'DATABASE') {
+      path = '/metastore/tables/' + self.authorizables()[0];
+    }
+    if (self.authorizables()[1] && self.authorizables()[1]['type'] == 'TABLE') {
+      path +=  "/" + self.authorizables()[1];
+    }
+    if (self.authorizables()[2] && self.authorizables()[2]['type'] == 'COLUMN') {
+      path +=  "#col=" + self.authorizables()[2];
+    }
+
+    return path;
+  });
+
+  // TODO remove
   function getPrivilegeScope() {
     if (self.privilegeType() == 'uri') {
       return 'URI';
-    } else if (self.columnName().length > 0) {
+    } else if (self.authorizables()[2] == 'COLUMN') {
       return 'COLUMN';
-    } else if (self.tableName().length > 0) {
+    } else if (self.authorizables()[1] == 'TABLE') {
       return 'TABLE';
-    } else if (self.dbName().length > 0) {
+    } else if (self.authorizables()[0] == 'DATABASE') {
       return 'DATABASE';
     } else {
       return 'SERVER';
@@ -126,7 +180,7 @@ var Privilege = function (vm, privilege) {
   }
 
   self.privilegeScope = ko.observable(typeof privilege.privilegeScope != "undefined" ? privilege.privilegeScope : getPrivilegeScope());
-
+/**
   self.privilegeType.subscribe(function(newVal){
     self.privilegeScope(getPrivilegeScope());
   });
@@ -142,7 +196,7 @@ var Privilege = function (vm, privilege) {
   self.dbName.subscribe(function(newVal){
     self.privilegeScope(getPrivilegeScope());
   });
-
+*/
   self.remove = function (privilege) {
     if (privilege.status() == 'new') {
       privilege.status('alreadydeleted');
@@ -240,8 +294,18 @@ var Role = function (vm, role) {
   }
 
   self.addPrivilege = function () {
-    if (vm.getSectionHash() == 'edit') {
-      self.privileges.push(new Privilege(vm, {'serverName': vm.assist.server(), 'status': 'new', 'editing': true, 'dbName': vm.assist.db(), 'tableName': vm.assist.table(), 'columnName': vm.assist.column()}));
+    if (vm.getSectionHash() == 'edit') { // used?
+      self.privileges.push(new Privilege(vm, {
+          'serverName': vm.assist.server(),
+          'status': 'new',
+          'component': vm.component(),
+          'editing': true,
+          'authorizables': [
+              {'type': 'DATABASE', 'name': vm.assist.db()},
+              {'type': 'TABLE', 'name': vm.assist.table()},
+              {'type': 'COLUMN', 'name': vm.assist.column()}
+           ]
+      }));
     } else {
       self.privileges.push(new Privilege(vm, {'serverName': vm.assist.server(), 'status': 'new', 'editing': true}));
     }
@@ -380,6 +444,14 @@ var Assist = function (vm, initial) {
   self.column = ko.computed(function () {
     var column = self.path().split(/[.]/)[2];
     return column ? column : null;
+  });
+  self.indexerPath = ko.computed(function () {
+    if (self.table()) {
+      return '/indexer/#edit/' + self.table();
+    }
+    else {
+      return '/indexer/#manage';
+    }
   });
   self.metastorePath = ko.computed(function(){
     if (self.column()) {
@@ -579,20 +651,20 @@ var Assist = function (vm, initial) {
   self.refreshTree = function (force) {
     self.growingTree(jQuery.extend(true, {}, self.initialGrowingTree));
     // load root first
-    self.fetchHivePath("", function () {
+    self.fetchAuthorizablesPath("", function () {
       Object.keys(self.treeAdditionalData).forEach(function (path) {
         if (path.indexOf(".") == -1 && path != "") {
           if (typeof force == "boolean" && force) {
-            self.fetchHivePath(path);
+            self.fetchAuthorizablesPath(path);
           }
           else {
             if (self.treeAdditionalData[path].loaded) {
-              self.fetchHivePath(path, function () {
+              self.fetchAuthorizablesPath(path, function () {
                 self.updatePathProperty(self.growingTree(), path, "isExpanded", self.treeAdditionalData[path].expanded);
                 var _withTable = false;
                 Object.keys(self.treeAdditionalData).forEach(function (ipath) {
                   if (ipath.split(".").length == 2 && ipath.split(".")[0] == path) {
-                    self.fetchHivePath(ipath, function () {
+                    self.fetchAuthorizablesPath(ipath, function () {
                       _withTable = true;
                       self.updatePathProperty(self.growingTree(), ipath, "isExpanded", self.treeAdditionalData[ipath].expanded);
                       self.loadData(self.growingTree());
@@ -639,7 +711,7 @@ var Assist = function (vm, initial) {
       }
     }
     else {
-      self.fetchHivePath();
+      self.fetchAuthorizablesPath();
     }
   }
 
@@ -647,12 +719,17 @@ var Assist = function (vm, initial) {
     self.setPath(obj, true);
   }
 
-  self.showHdfs = function (obj, e) {
+  self.showAuthorizable = function (obj, e) {
     e.preventDefault();
     e.stopPropagation();
     e.stopImmediatePropagation();
-    self.fetchHivePath(obj.path(), function(data){
-      location.href = "/security/hdfs#" + data.hdfs_link.substring("/filebrowser/view=".length);
+    self.fetchAuthorizablesPath(obj.path(), function (data) {
+      if (vm.component() === 'solr') {
+        location.href = data.authorizable_link;
+      }
+      else {
+        location.href = "/security/hdfs#" + data.hdfs_link.substring("/filebrowser/view=".length);
+      }
     });
   }
 
@@ -715,13 +792,13 @@ var Assist = function (vm, initial) {
   }
 
   self.loadParents = function (callback) {
-    self.fetchHivePath("", function () {
+    self.fetchAuthorizablesPath("", function () {
       self.updatePathProperty(self.growingTree(), "", "isExpanded", true);
       var _crumbs = self.path().split(".");
-      self.fetchHivePath(_crumbs[0], function () {
+      self.fetchAuthorizablesPath(_crumbs[0], function () {
         self.updatePathProperty(self.growingTree(), _crumbs[0], "isExpanded", true);
         if (_crumbs.length > 1) {
-          self.fetchHivePath(_crumbs[0] + "." + _crumbs[1], function () {
+          self.fetchAuthorizablesPath(_crumbs[0] + "." + _crumbs[1], function () {
             self.updatePathProperty(self.growingTree(), _crumbs[0] + "." + _crumbs[1], "isExpanded", true);
             self.loadData(self.growingTree());
             if (typeof callback != "undefined") {
@@ -747,7 +824,7 @@ var Assist = function (vm, initial) {
     });
   }
 
-  self.fetchHivePath = function (optionalPath, loadCallback) {
+  self.fetchAuthorizablesPath = function (optionalPath, loadCallback) {
     var _originalPath = typeof optionalPath != "undefined" ? optionalPath : self.path();
 
     if (_originalPath.split(".").length < 4) {
@@ -755,9 +832,10 @@ var Assist = function (vm, initial) {
 
       var _path = _originalPath.replace('.', '/');
       var request = {
-        url: '/security/api/sentry/fetch_hive_path',
+        url: '/security/api/sentry/fetch_authorizables',
         data: {
           'path': _path,
+          'component': vm.component(),
           'doas': vm.doAs(),
           'isDiffMode': self.isDiffMode()
         },
@@ -807,7 +885,7 @@ var Assist = function (vm, initial) {
 }
 
 
-var HiveViewModel = function (initial) {
+var SentryViewModel = function (initial) {
   var self = this;
 
   self.isLoadingRoles = ko.observable(false);
@@ -815,12 +893,18 @@ var HiveViewModel = function (initial) {
   self.isApplyingBulk = ko.observable(false);
 
   self.availablePrivileges = ko.observableArray(['SERVER', 'DATABASE', 'TABLE', 'COLUMN']);
-  self.availableActions = ko.observableArray(['SELECT', 'INSERT', 'ALL']);
+  self.availableActions = ko.observableArray();
+  if (initial.component == 'solr') {
+    self.availableActions(['QUERY', 'UPDATE', 'ALL']);
+  } else {
+    self.availableActions(['SELECT', 'INSERT', 'ALL']);
+  }
 
   self.privilegeFilter = ko.observable("");
 
   // Models
   self.component = ko.observable(initial.component);
+  self.user = ko.observable(initial.user);
   self.server = ko.observable(initial.sentry_provider);
   self.roles = ko.observableArray();
   self.tempRoles = ko.observableArray();
@@ -947,7 +1031,7 @@ var HiveViewModel = function (initial) {
       if (path != "") {
         self.assist.loadParents();
       } else {
-        self.assist.fetchHivePath();
+        self.assist.fetchAuthorizablesPath();
       }
     }, 100);
   };
@@ -1021,7 +1105,7 @@ var HiveViewModel = function (initial) {
     $.ajax({
       type: "POST",
       url: "/security/api/sentry/list_sentry_privileges_by_role",
-      data: {        
+      data: {
         'server': self.server(),
         'component': self.component(),
         'roleName': role.name
@@ -1050,15 +1134,12 @@ var HiveViewModel = function (initial) {
 
   function _create_ko_privilege(privilege) {
     var _privilege = new Privilege(self, {
-      'privilegeScope': privilege.scope,
-      'serverName': privilege.server,
-      'dbName': privilege.database,
-      'tableName': privilege.table,
-      'columnName': privilege.column,
-      'URI': privilege.URI,
+      'component': privilege.component,
+      'serverName': privilege.serviceName,
+      'authorizables': privilege.authorizables,
       'action': privilege.action,
       'timestamp': privilege.timestamp,
-      'roleName': privilege.roleName,
+      'grantorPrincipal': privilege.grantorPrincipal,
       'grantOption': privilege.grantOption,
       'id': UUID()
     });
@@ -1070,7 +1151,7 @@ var HiveViewModel = function (initial) {
 
     if (optionalPath != null) {
       var paths = optionalPath.split(/[.]/);
-      
+
       if (paths[0]) { authorizables.push({'type': 'db', 'name': paths[0]}); }
       if (paths[1]) { authorizables.push({'type': 'table', 'name': paths[1]}); }
       if (paths[2]) { authorizables.push({'type': 'column', 'name': paths[2]}); }

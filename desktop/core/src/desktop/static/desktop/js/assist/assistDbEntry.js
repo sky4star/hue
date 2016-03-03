@@ -51,8 +51,10 @@
     self.assistDbSource = assistDbSource;
     self.parent = parent;
     self.filter = filter;
-    self.isSearchVisible = ko.observable(false);
+    self.isSearchVisible = assistDbSource.isSearchVisible;
     self.editingSearch = ko.observable(false);
+    self.sourceType = self.assistDbSource.sourceType;
+    self.invalidateOnRefresh =  self.assistDbSource.invalidateOnRefresh;
 
     self.expandable = typeof definition.type === "undefined" || /table|view|struct|array|map/i.test(definition.type);
 
@@ -62,6 +64,8 @@
     self.entries = ko.observableArray([]);
     self.statsVisible = ko.observable(false);
 
+    self.hasErrors = ko.observable(false);
+
     self.navigationSettings = navigationSettings;
 
     self.open.subscribe(function(newValue) {
@@ -70,11 +74,11 @@
       }
     });
 
-    self.hasEntries = ko.computed(function() {
+    self.hasEntries = ko.pureComputed(function() {
       return self.entries().length > 0;
     });
 
-    self.filteredEntries = ko.computed(function () {
+    self.filteredEntries = ko.pureComputed(function () {
       if (self.filter == null || (self.filter.showTables && self.filter.showTables() && self.filter.showViews() && self.filter.query().length === 0)) {
         return self.entries();
       }
@@ -103,7 +107,7 @@
       self.columnName = self.definition.name;
     }
 
-    self.editorText = ko.computed(function () {
+    self.editorText = ko.pureComputed(function () {
       if (self.definition.isTable || self.definition.isView) {
         return self.definition.name;
       }
@@ -117,7 +121,7 @@
           break;
         }
         if (entry.definition.isArray || entry.definition.isMapValue) {
-          if (self.assistDbSource.type === 'hive') {
+          if (self.assistDbSource.sourceType === 'hive') {
             parts.push("[]");
           }
         } else {
@@ -138,6 +142,11 @@
     self.editingSearch(self.isSearchVisible());
   };
 
+  AssistDbEntry.prototype.triggerRefresh = function () {
+    var self = this;
+    self.assistDbSource.triggerRefresh();
+  };
+
   AssistDbEntry.prototype.loadEntries = function() {
     var self = this;
     if (!self.expandable || self.loading()) {
@@ -147,8 +156,10 @@
 
     var successCallback = function(data) {
       self.entries([]);
+      self.hasErrors(false);
+      var newEntries = [];
       if (typeof data.tables_meta !== "undefined") {
-        self.entries($.map(data.tables_meta, function(table) {
+        newEntries = $.map(data.tables_meta, function(table) {
           return self.createEntry({
             name: table.name,
             displayName: table.name,
@@ -157,9 +168,9 @@
             isTable: /table/i.test(table.type),
             isView: /view/i.test(table.type)
           });
-        }));
+        });
       } else if (typeof data.extended_columns !== "undefined" && data.extended_columns !== null) {
-        self.entries($.map(data.extended_columns, function (columnDef) {
+        newEntries = $.map(data.extended_columns, function (columnDef) {
           var displayName = columnDef.name;
           if (typeof columnDef.type !== "undefined" && columnDef.type !== null) {
             displayName += ' (' + columnDef.type + ')'
@@ -179,19 +190,19 @@
             isColumn: true,
             type: shortType
           });
-        }));
+        });
       } else if (typeof data.columns !== "undefined" && data.columns !== null) {
-        self.entries($.map(data.columns, function(columnName) {
+        newEntries = $.map(data.columns, function(columnName) {
           return self.createEntry({
             name: columnName,
             displayName: columnName,
             title: columnName,
             isColumn: true
           });
-        }));
+        });
       } else if (typeof data.type !== "undefined" && data.type !== null) {
         if (data.type === "map") {
-          self.entries([
+          newEntries = [
             self.createEntry({
               name: "key",
               displayName: "key (" + data.key.type + ")",
@@ -205,19 +216,18 @@
               isMapValue: true,
               type: data.value.type
             })
-          ]);
-          self.entries()[1].open(true);
+          ];
         } else if (data.type == "struct") {
-          self.entries($.map(data.fields, function(field) {
+          newEntries = $.map(data.fields, function(field) {
             return self.createEntry({
               name: field.name,
               displayName: field.name + " (" + field.type + ")",
               title: field.name + " (" + field.type + ")",
               type: field.type
             });
-          }));
+          });
         } else if (data.type == "array") {
-          self.entries([
+          newEntries = [
             self.createEntry({
               name: "item",
               displayName: "item (" + data.item.type + ")",
@@ -225,20 +235,31 @@
               isArray: true,
               type: data.item.type
             })
-          ]);
-          self.entries()[0].open(true);
+          ];
         }
       }
+
       self.loading(false);
+      if (data.type === 'array' || data.type === 'map') {
+        self.entries(newEntries);
+        self.entries()[0].open(true);
+        return;
+      }
+
+      newEntries.sort(function (a, b) {
+        return a.definition.name.localeCompare(b.definition.name);
+      });
+
+      self.entries(newEntries);
     };
 
     var errorCallback = function () {
-      self.assistDbSource.hasErrors(true);
+      self.hasErrors(true);
       self.loading(false);
     };
 
     self.assistDbSource.assistHelper.fetchPanelData({
-      sourceType: self.assistDbSource.type,
+      sourceType: self.assistDbSource.sourceType,
       hierarchy: self.getHierarchy(),
       successCallback: successCallback,
       errorCallback: errorCallback
@@ -292,6 +313,7 @@
       })
     } else if (self.definition.isDatabase) {
       huePubSub.publish("assist.database.selected", {
+        source: self.assistDbSource.sourceType,
         name: self.definition.name
       })
     }
@@ -312,10 +334,9 @@
     $assistQuickLook.attr("style", "width: " + ($(window).width() - 120) + "px;margin-left:-" + (($(window).width() - 80) / 2) + "px!important;");
 
     self.assistDbSource.assistHelper.fetchTableSample({
-      sourceType: self.assistDbSource.type === "hive" ? "beeswax" : self.assistDbSource.type,
+      type: self.assistDbSource.sourceType,
       databaseName: databaseName,
       tableName: tableName,
-      dataType: "html",
       successCallback: function(data) {
         if (! data.rows) {
           data.rows = [];
@@ -326,10 +347,7 @@
         self.assistDbSource.loadingSamples(false);
       },
       errorCallback: function(e) {
-        if (e.status == 500) {
-          $(document).trigger("error", self.i18n.errorLoadingTablePreview);
-          $("#assistQuickLook").modal("hide");
-        }
+        $("#assistQuickLook").modal("hide");
       }
     });
 

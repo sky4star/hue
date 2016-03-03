@@ -65,16 +65,19 @@ ${ assist.assistPanel() }
           <div class="assist" data-bind="component: {
               name: 'assist-panel',
               params: {
-                sourceTypes: [{
-                  name: 'hive',
-                  type: 'hive'
-                }],
                 user: '${user.username}',
-                navigationSettings: {
-                  openItem: true,
-                  showPreview: true,
-                  showStats: false
-                }
+                sql: {
+                  sourceTypes: [{
+                    name: 'hive',
+                    type: 'hive'
+                  }],
+                  navigationSettings: {
+                    openItem: false,
+                    showPreview: true,
+                    showStats: true
+                  }
+                },
+                visibleAssistPanels: ['sql']
               }
             }"></div>
         </div>
@@ -86,8 +89,7 @@ ${ assist.assistPanel() }
 
             <h3>
               <div class="inline-block pull-right" style="margin-top: -8px">
-                <a href="${ url('beeswax:import_wizard', database=database) }" title="${_('Create a new table from a file')}" class="inactive-action"><i class="fa fa-files-o"></i></a>
-                <a href="${ url('beeswax:create_table', database=database) }" title="${_('Create a new table manually')}" class="inactive-action margin-left-10"><i class="fa fa-wrench"></i></a>
+                <a href="${ url('beeswax:import_wizard', database=database) }" title="${_('Create a new table from a file')}" class="inactive-action"><span class="fa-stack fa-fw" style="width: 1.28571429em"><i class="fa fa-file-o fa-stack-1x"></i><i class="fa fa-plus-circle fa-stack-1x" style="font-size: 14px; margin-left: 5px; margin-top: 6px;"></i></span></a>
               </div>
               <ul id="breadcrumbs" class="nav nav-pills hueBreadcrumbBar">
                 <li>
@@ -126,7 +128,7 @@ ${ assist.assistPanel() }
                                   )
                                 )}
                                 <span  class="help-inline error-inline hide">${_('This field is required. Spaces are not allowed.')}</span>
-                                <p class="help-block">
+                                <p class="help-block muted">
                                     ${_('Name of the new table. Table names must be globally unique. Table names tend to correspond to the directory where the data will be stored.')}
                                 </p>
                             </div>
@@ -138,7 +140,7 @@ ${ assist.assistPanel() }
                                   placeholder=_('Optional'),
                                   )
                                 )}
-                                <p class="help-block">
+                                <p class="help-block muted">
                                     ${_("Use a table comment to describe your table.  For example, note the data's provenance and any caveats users need to know.")}
                                 </p>
                             </div>
@@ -164,7 +166,7 @@ ${ assist.assistPanel() }
                                         % endif
                                             >
                                     ${_('Delimited')}
-                                    <span class="help-inline">
+                                    <span class="help-block muted">
                                     ${_('(Data files use delimiters, like commas (CSV) or tabs.)')}
                                     </span>
                                 </label>
@@ -175,7 +177,7 @@ ${ assist.assistPanel() }
                                         % endif
                                             >
                                     ${_('SerDe')}
-                                    <span class="help-inline">
+                                    <span class="help-block muted">
                                     ${_('(Enter a specialized serialization implementation.)')}
                                     </span>
                                 </label>
@@ -195,7 +197,7 @@ ${ assist.assistPanel() }
                                 <div class="controls">
                                     ${comps.field(table_form["field_terminator"], render_default=True)}
                                     <span  class="help-inline error-inline hide">${_('This field is required. Spaces are not allowed.')}</span>
-                                    <span class="help-block">
+                                    <span class="help-block muted">
                                         ${_('Enter the column delimiter. Must be a single character. Use syntax like "\\001" or "\\t" for special characters.')}
                                     </span>
                                 </div>
@@ -205,7 +207,7 @@ ${ assist.assistPanel() }
                                 <div class="controls">
                                     ${comps.field(table_form["collection_terminator"], render_default=True)}
                                     <span  class="help-inline error-inline hide">${_('This field is required. Spaces are not allowed.')}</span>
-                                    <span class="help-block">
+                                    <span class="help-block muted">
                                         ${_('Use for array types.')}
                                     </span>
                                 </div>
@@ -215,7 +217,7 @@ ${ assist.assistPanel() }
                                 <div class="controls">
                                     ${comps.field(table_form["map_key_terminator"], render_default=True)}
                                     <span  class="help-inline error-inline hide">${_('This field is required. Spaces are not allowed.')}</span>
-                                    <span class="help-block">
+                                    <span class="help-block muted">
                                         ${_('Use for map types.')}
                                     </span>
                                 </div>
@@ -231,7 +233,7 @@ ${ assist.assistPanel() }
                                     placeholder='com.acme.hive.SerDe',
                                     )
                                     )}
-                                    <span class="help-block">
+                                    <span class="help-block muted">
                                         ${_('The Java class name of your SerDe.')} <em>${_('e.g.')}</em>, org.apache.hadoop.hive.contrib.serde2.RegexSerDe
                                     </span>
                                 </div>
@@ -243,7 +245,7 @@ ${ assist.assistPanel() }
                                     placeholder='"prop" = "value", "prop2" = "value2"',
                                     )
                                     )}
-                                    <span class="help-block">
+                                    <span class="help-block muted">
                                         ${_('Properties to pass to the (de)serialization mechanism.')} <em>${_('e.g.')},</em>, "input.regex" = "([^ ]*) ([^ ]*) ([^ ]*) (-|\\[[^\\]]*\\]) ([^ \"]*|\"[^\"]*\") (-|[0-9]*) (-|[0-9]*)(?: ([^ \"]*|\"[^\"]*\") ([^ \"]*|\"[^\"]*\"))?", "output.format.string" = "%1$s %2$s %3$s %4$s %5$s %6$s %7$s %8$s %9$s"
                                     </span>
                                 </div>
@@ -280,7 +282,7 @@ ${ assist.assistPanel() }
                                     )
                                     )}
                                     <span  class="help-inline error-inline hide">${_('This field is required. Spaces are not allowed.')}</span>
-                                    <span class="help-block">
+                                    <span class="help-block muted">
                                         ${_('Java class used to read data.')}
                                     </span>
                                 </div>
@@ -293,7 +295,7 @@ ${ assist.assistPanel() }
                                     )
                                     )}
                                     <span  class="help-inline error-inline hide">${_('This field is required. Spaces are not allowed.')}</span>
-                                    <span class="help-block">
+                                    <span class="help-block muted">
                                         ${_('Java class used to write data.')}
                                     </span>
                                 </div>
@@ -315,7 +317,7 @@ ${ assist.assistPanel() }
                                     )}
                                     ${_('Use default location')}
                                 </label>
-                                <span class="help-block">
+                                <span class="help-block muted">
                                     ${_('Store your table in the default location (controlled by Hive, and typically')} <em>/user/hive/warehouse/table_name</em>).
                                 </span>
                             </div>
@@ -330,7 +332,7 @@ ${ assist.assistPanel() }
                                 file_chooser=True,
                                 show_errors=False
                                 )}
-                                <span class="help-block">
+                                <span class="help-block muted">
                                 ${_("Enter the path (on HDFS) to your table's data location")}
                                 </span>
                             </div>
@@ -368,7 +370,7 @@ ${ assist.assistPanel() }
                     </fieldset>
                 </div>
               </div>
-              <div class="form-actions" style="padding-left: 10px">
+              <div class="form-actions" style="padding-left: 0">
                   <button type="button" id="backBtn" class="btn hide">${_('Back')}</button>
                   <button type="button" id="nextBtn" class="btn btn-primary">${_('Next')}</button>
                   <input id="submit" type="submit" name="create" class="btn btn-primary hide" value="${_('Create table')}" />
@@ -391,16 +393,16 @@ ${ assist.assistPanel() }
         ${comps.field(form['_deleted'], tag="button", button_text="x", notitle=True, attrs=dict(
         type="submit",
         title=_("Delete this column"),
-        klass="btn btn-mini removeBtn"
+        klass="btn btn-small removeBtn"
         ), value=True)}
         </div>
         <div class="control-group">
             <label class="control-label">${_('Column name')}</label>
             <div class="controls">
-                <input class="column" name="${form["column_name"].html_name | n}" value="${form["column_name"].data or ''}" placeholder="${_('Column Name')}"/>
+                <input class="column input input-large" name="${form["column_name"].html_name | n}" value="${form["column_name"].data or ''}" placeholder="${_('Column Name')}"/>
                 <span  class="help-inline error-inline hide">${_('This field is required. Spaces are not allowed.')}</span>
                 <span  class="help-inline error-inline error-inline-bis hide">${_('There is another field with the same name.')}</span>
-                <span class="help-block">
+                <span class="help-block muted">
                 ${_('Column name must be single words that start with a letter or a digit.')}
                 </span>
             </div>
@@ -411,7 +413,7 @@ ${ assist.assistPanel() }
             ${comps.field(form["column_type"],
             render_default=True
             )}
-            <span class="help-block">
+            <span class="help-block muted">
             ${_('Type for this column. Certain advanced types (namely, structs) are not exposed in this interface.')}
             </span>
             </div>
@@ -422,7 +424,7 @@ ${ assist.assistPanel() }
                         <label class="control-label">${_('Array value type')}</label>
                         <div class="controls">
                         ${comps.field(form["array_type"], render_default=True)}
-                            <span class="help-block">
+                            <span class="help-block muted">
                             ${_('Type of the array values.')}
                             </span>
                         </div>
@@ -433,7 +435,7 @@ ${ assist.assistPanel() }
                         <label class="control-label">${_('Map Key type')}</label>
                         <div class="controls">
                         ${comps.field(form["map_key_type"], render_default=True)}
-                            <span class="help-inline">
+                            <span class="help-block muted">
                             ${_('Type of the map keys.')}
                             </span>
                         </div>
@@ -442,7 +444,7 @@ ${ assist.assistPanel() }
                         <label class="control-label">${_('Map Value type')}</label>
                         <div class="controls">
                         ${comps.field(form["map_value_type"], render_default=True)}
-                            <span class="help-inline">
+                            <span class="help-block muted">
                             ${_('Type of the map values.')}
                             </span>
                         </div>
@@ -454,7 +456,7 @@ ${ assist.assistPanel() }
                 <label class="control-label">${_('Size')}</label>
                 <div class="controls">
                 ${comps.field(form["char_length"], render_default=True)}
-                    <span class="help-block">
+                    <span class="help-block muted">
                     ${_("Length of char value (1~255)")}
                     </span>
                 </div>
@@ -465,7 +467,7 @@ ${ assist.assistPanel() }
                 <label class="control-label">${_('Size')}</label>
                 <div class="controls">
                 ${comps.field(form["varchar_length"], render_default=True)}
-                    <span class="help-block">
+                    <span class="help-block muted">
                     ${_("Length of varchar value (1~65355)")}
                     </span>
                 </div>
@@ -524,6 +526,18 @@ ${ assist.assistPanel() }
   div .alert {
     margin-bottom: 30px;
   }
+
+  .cnt.well {
+    border: none;
+  }
+
+  .cnt.well:hover {
+    background-color: #F0F0F0;
+  }
+
+  .help-block.muted, .help-inline.muted  {
+    color: #999;
+  }
 </style>
 
 </div>
@@ -547,10 +561,11 @@ ${ assist.assistPanel() }
 
     function MetastoreViewModel(options) {
       var self = this;
+      self.assistHelper = AssistHelper.getInstance(options);
       self.assistAvailable = ko.observable(true);
-      self.isLeftPanelVisible = ko.observable(self.assistAvailable() && $.totalStorage('spark_left_panel_visible') != null && $.totalStorage('spark_left_panel_visible'));
+      self.isLeftPanelVisible = ko.observable();
+      self.assistHelper.withTotalStorage('assist', 'assist_panel_visible', self.isLeftPanelVisible, true);
 
-      self.assistHelper = new AssistHelper(options);
 
       huePubSub.subscribe("assist.table.selected", function (tableDef) {
         location.href = '/metastore/table/' + tableDef.database + '/' + tableDef.name;
@@ -558,10 +573,6 @@ ${ assist.assistPanel() }
 
       huePubSub.subscribe("assist.database.selected", function (databaseDef) {
         location.href = '/metastore/tables/' + databaseDef.name;
-      });
-
-      self.isLeftPanelVisible.subscribe(function (newValue) {
-        $.totalStorage('spark_left_panel_visible', newValue);
       });
     }
 
@@ -749,7 +760,7 @@ ${ assist.assistPanel() }
           if (!isValid($.trim(_field.val()))) {
             showFieldError(_field);
             if (scrollTo == 0) {
-              scrollTo = $(this).position().top - $(this).closest(".well").height();
+              scrollTo = $(this).offset().top + $('.right-panel').scrollTop() - 150;
             }
             step6Valid = false;
           }
@@ -761,7 +772,7 @@ ${ assist.assistPanel() }
             if ($.trim($(this).val()) != "" && $.trim($(this).val()) == $.trim(_field.val())) {
               _lastSecondErrorField = $(this);
               if (scrollTo == 0) {
-                scrollTo = _field.position().top - _field.closest(".well").height();
+                scrollTo = _field.offset().top + $('.right-panel').scrollTop() - 150;
               }
               step6Valid = false;
             }
@@ -774,7 +785,9 @@ ${ assist.assistPanel() }
           }
         });
         if (!step6Valid && scrollTo > 0) {
-          $(window).scrollTop(scrollTo);
+          $('.right-panel').animate({
+            'scrollTop' : scrollTo
+          }, 500);
         }
         return step6Valid;
       }

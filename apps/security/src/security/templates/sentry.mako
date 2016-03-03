@@ -24,7 +24,7 @@ from django.utils.translation import ugettext as _
 <%namespace name="tree" file="common_tree.mako" />
 
 ${ commonheader(_('Hadoop Security'), "security", user) | n,unicode }
-${ layout.menubar(section='hive2') }
+${ layout.menubar(section=component) }
 
 
 <script type="text/html" id="role">
@@ -48,29 +48,40 @@ ${ layout.menubar(section='hive2') }
 
   <!-- ko if: editing() -->
     <div class="pull-right privilege-actions" data-bind="visible: grantOption() || $root.is_sentry_admin">
+      <!-- ko if: $root.component() != 'solr' -->
       <a title="${ _('Grant this privilege') }" class="pointer" style="margin-right: 4px" data-bind="click: function(){ $root.grantToPrivilege($data); $('#grantPrivilegeModal').modal('show'); }"><i class="fa fa-send"></i></a>
+      <!-- /ko -->
       <a class="pointer" style="margin-right: 4px" data-bind="click: function() { if (editing()) { editing(false); }}"><i class="fa fa-eye"></i></a>
       <a class="pointer" style="margin-right: 4px" data-bind="click: remove"><i class="fa fa-times"></i></a>
     </div>
 
-    <div class="inline-block" style="vertical-align: middle">
-      <a class="pointer" style="padding-top: 4px" data-bind="click: function(){ privilegeType('db'); action($root.availableActions()[0]) }">
-        <i class="fa fa-fw fa-1halfx muted" data-bind="css: {'fa-circle-o': privilegeType() != 'db' , 'fa-check-circle-o': privilegeType() == 'db'}"></i>
-      </a>
-    </div>
-    <input type="text" data-bind="hivechooser: $data.path, enable: privilegeType() == 'db'" placeholder="dbName.tableName <CTRL+SPACE>">
+    <!-- ko if: $root.component() == 'hive' -->
+      <div class="inline-block" style="vertical-align: middle">
+        <a class="pointer" style="padding-top: 4px" data-bind="click: function(){ privilegeType('db'); action($root.availableActions()[0]) }">
+          <i class="fa fa-fw fa-1halfx muted" data-bind="css: {'fa-circle-o': privilegeType() != 'db', 'fa-check-circle-o': privilegeType() == 'db'}"></i>
+        </a>
+      </div>
+      <input type="text" data-bind="hivechooser: $data.path, enable: privilegeType() == 'db'" placeholder="dbName.tableName <CTRL+SPACE>">
 
-    <div class="inline-block" style="vertical-align: middle">
-      <a class="pointer" style="padding-top: 4px" data-bind="click: function(){ privilegeType('uri'); action('ALL'); }">
-        <i class="fa fa-fw fa-1halfx muted" data-bind="css: {'fa-circle-o': privilegeType() != 'uri' , 'fa-check-circle-o': privilegeType() == 'uri'}"></i>
-      </a>
-    </div>
-    <input type="text" data-bind="filechooser: $data.URI, enable: privilegeType() == 'uri'" placeholder="URI">
+      <div class="inline-block" style="vertical-align: middle">
+        <a class="pointer" style="padding-top: 4px" data-bind="click: function(){ privilegeType('uri'); action('ALL'); }">
+          <i class="fa fa-fw fa-1halfx muted" data-bind="css: {'fa-circle-o': privilegeType() != 'uri', 'fa-check-circle-o': privilegeType() == 'uri'}"></i>
+        </a>
+      </div>
 
-    <select data-bind="options: $root.availableActions, value: $data.action, enable: (privilegeType() == 'db')" style="width: 100px; margin-bottom: 0"></select>
+      <input type="text" data-bind="filechooser: 'URI TODO', enable: privilegeType() == 'uri'" placeholder="URI">
+
+      <select data-bind="options: $root.availableActions, value: $data.action, enable: (privilegeType() == 'db')" style="width: 100px; margin-bottom: 0"></select>
+    <!-- /ko -->
+    <!-- ko if: $root.component() == 'solr' -->
+      <input type="text" class="input-xxlarge" data-bind="solrchooser: $data.path, enable: privilegeType() == 'db'" placeholder="collection name <CTRL+SPACE>">
+      <select data-bind="options: $root.availableActions, value: $data.action, enable: (privilegeType() == 'db')" style="width: 100px; margin-bottom: 0"></select>
+    <!-- /ko -->
 
     <div class="new-line-if-small">
+      <!-- ko if: $root.component() != 'solr' -->
       <label class="checkbox"><input type="checkbox" data-bind="checked: grantOption"> ${ _('With grant') }</label>
+      <!-- /ko -->
       <a class="pointer showAdvanced" data-bind="click: function(){ showAdvanced(true); }, visible: ! showAdvanced()"><i class="fa fa-cog"></i> ${ _('Show advanced') }</a>
       <a class="pointer showAdvanced" data-bind="click: function(){ showAdvanced(false); }, visible: showAdvanced()"><i class="fa fa-cog"></i> ${ _('Hide advanced') }</a>
       <div class="clearfix"></div>
@@ -84,41 +95,59 @@ ${ layout.menubar(section='hive2') }
   <!-- ko ifnot: editing() -->
     <!-- ko ifnot: $root.isApplyingBulk() -->
     <div class="pull-right privilege-actions" data-bind="visible: grantOption() || $root.is_sentry_admin">
+      <!-- ko if: $root.component() != 'solr' -->
       <a title="${ _('Grant this privilege') }" class="pointer" style="margin-right: 4px" data-bind="click: function(){ $root.grantToPrivilege($data); $('#grantPrivilegeModal').modal('show'); }"><i class="fa fa-send"></i></a>
+      <!-- /ko -->
       <a title="${ _('Edit this privilege') }" class="pointer" style="margin-right: 4px" data-bind="visible: $root.is_sentry_admin, click: function() { if (! editing()) { editing(true); }}"><i class="fa fa-pencil"></i></a>
       <a title="${ _('Delete this privilege') }" class="pointer" style="margin-right: 4px" data-bind="visible: $root.is_sentry_admin, click: remove"><i class="fa fa-times"></i></a>
     </div>
     <!-- /ko -->
 
     <span class="muted" data-bind="text: privilegeScope, attr: {title: moment(timestamp()).fromNow()}"></span>
+
     <!-- ko if: grantOption -->
       <i class="fa fa-unlock muted" title="${ _('With grant option') }"></i>
     <!-- /ko -->
-    <span data-bind="visible: metastorePath() != '' && privilegeType() == 'db'">
-      <a data-bind="attr: { href: metastorePath() }" class="muted" target="_blank" style="margin-left: 4px" title="${ _('Open in Metastore') }"><i class="fa fa-external-link"></i></a>
-    </span>
-    <br/>
 
-    server=<span data-bind="text: serverName"></span>
+    <!-- ko if: $root.component() == 'hive' -->
+      <span data-bind="visible: metastorePath() != '' && privilegeType() == 'db'">
+        <a data-bind="attr: { href: metastorePath() }" class="muted" target="_blank" style="margin-left: 4px" title="${ _('Open in Metastore') }"><i class="fa fa-external-link"></i></a>
+      </span>
+      <br/>
 
-    <!-- ko if: privilegeType() == 'db' -->
-      <span data-bind="visible: dbName">
-        <i class="fa fa-long-arrow-right"></i> db=<a class="pointer" data-bind="click: function(){ $root.linkToBrowse(dbName()) }" title="${ _('Browse db privileges') }"><span data-bind="text: dbName"></span></a>
-      </span>
-      <span data-bind="visible: tableName">
-        <i class="fa fa-long-arrow-right"></i> table=<a class="pointer" data-bind="click: function(){ $root.linkToBrowse(dbName() + '.' + tableName()) }" title="${ _('Browse table privileges') }"><span data-bind="text: tableName"></span></a>
-      </span>
-      <span data-bind="visible: columnName">
-        <i class="fa fa-long-arrow-right"></i> column=<a class="pointer" data-bind="click: function(){ $root.linkToBrowse(dbName() + '.' + tableName() + '.' + columnName()) }" title="${ _('Browse column privileges') }"><span data-bind="text: columnName"></span></a>
-      </span>
+      server=<span data-bind="text: serverName"></span>
+
+      <!-- ko if: privilegeType() == 'db' -->
+        <span data-bind="visible: dbName">
+          <i class="fa fa-long-arrow-right"></i> db=<a class="pointer" data-bind="click: function(){ $root.linkToBrowse(dbName()) }" title="${ _('Browse db privileges') }"><span data-bind="text: dbName"></span></a>
+        </span>
+        <span data-bind="visible: tableName">
+          <i class="fa fa-long-arrow-right"></i> table=<a class="pointer" data-bind="click: function(){ $root.linkToBrowse(dbName() + '.' + tableName()) }" title="${ _('Browse table privileges') }"><span data-bind="text: tableName"></span></a>
+        </span>
+        <span data-bind="visible: columnName">
+          <i class="fa fa-long-arrow-right"></i> column=<a class="pointer" data-bind="click: function(){ $root.linkToBrowse(dbName() + '.' + tableName() + '.' + columnName()) }" title="${ _('Browse column privileges') }"><span data-bind="text: columnName"></span></a>
+        </span>
+      <!-- /ko -->
+
+      <!-- ko if: privilegeType() == 'uri' -->
+        <i class="fa fa-long-arrow-right"></i> <i class="fa fa-file-o"></i> <i class="fa fa-long-arrow-right"></i> <a data-bind="attr: { href: '/filebrowser/view=/' + URI().split('/')[3] }" target="_blank"><span data-bind="text: URI"></span></a>
+      <!-- /ko -->
+
     <!-- /ko -->
+    <!-- ko if: $root.component() == 'solr' -->
+      <br/>
 
-    <!-- ko if: privilegeType() == 'uri' -->
-      <i class="fa fa-long-arrow-right"></i> <i class="fa fa-file-o"></i> <i class="fa fa-long-arrow-right"></i> <a data-bind="attr: { href: '/filebrowser/view=/' + URI().split('/')[3] }" target="_blank"><span data-bind="text: URI"></span></a>
+      <!-- ko foreach: authorizables -->
+        <!-- ko if: name_() != '' -->
+          <!-- ko if: $index() > 0 -->
+            <i class="fa fa-long-arrow-right"></i>
+          <!-- /ko -->
+          <span data-bind="text: type"></span>=<span data-bind="text: name_"></span></span>
+        <!-- /ko -->
+      <!-- /ko -->
     <!-- /ko -->
 
     <i class="fa fa-long-arrow-right"></i> action=<span data-bind="text: action"></span>
-
   <!-- /ko -->
 </div>
 </script>
@@ -145,7 +174,12 @@ ${ layout.menubar(section='hive2') }
 
       <div id="edit" class="mainSection card card-small">
         <h1 class="card-heading simple">
+          <!-- ko if: component() == 'hive' -->
           ${ _('Database and Table privileges') }
+          <!-- /ko -->
+          <!-- ko if: component() == 'solr' -->
+          ${ _('Collections privileges') }
+          <!-- /ko -->
           <div id="help-content" class="hide">
             ${ _('Check the') } <a href="http://gethue.com/apache-sentry-made-easy-with-the-new-hue-security-app/#howto" target="_blank">${ _('documentation!') }</a>
           </div>
@@ -165,9 +199,16 @@ ${ layout.menubar(section='hive2') }
               <div class="path-container">
                 <div class="input-append span12">
                   <input id="path" class="path" type="text" autocomplete="off" />
+                  <!-- ko if: $root.component() == 'solr' -->
+                  <a data-bind="attr: { href: $root.assist.indexerPath() }" target="_blank" title="${ _('Open in Indexer') }" class="btn btn-inverse">
+                    <i class="fa fa-external-link"></i>
+                  </a>
+                  <!-- /ko -->
+                  <!-- ko ifnot: $root.component() == 'solr' -->
                   <a data-bind="attr: { href: $root.assist.metastorePath() }" target="_blank" title="${ _('Open in Metastore Browser') }" class="btn btn-inverse">
                     <i class="fa fa-external-link"></i>
                   </a>
+                  <!-- /ko -->
                 </div>
                 <div class="clearfix"></div>
                 <div class="tree-toolbar">
@@ -540,7 +581,7 @@ ${ layout.menubar(section='hive2') }
 <%def name="withPrivilegesPullRight()">
   <div class="pull-right">
     <i class="fa fa-shield" data-bind="visible: withPrivileges()" style="color: #338bb8" title="${ _('Has some privileges') }"></i>&nbsp;
-    <i class="fa fa-file-o muted" data-bind="click: $root.assist.showHdfs ,visible: isTable()"></i>
+    <i class="fa fa-file-o muted" data-bind="click: $root.assist.showAuthorizable ,visible: isTable()"></i>
   </div>
 </%def>
 
@@ -574,7 +615,7 @@ ${ tree.import_templates(itemClick='$root.assist.setPath', iconClick='$root.assi
       }
     }
 
-    var viewModel = new HiveViewModel(${ initial | n,unicode });
+    var viewModel = new SentryViewModel(${ initial | n,unicode });
     ko.applyBindings(viewModel);
 
     $(document).ready(function () {
@@ -596,11 +637,12 @@ ${ tree.import_templates(itemClick='$root.assist.setPath', iconClick='$root.assi
         }
         viewModel.assist.path(path);
         viewModel.assist.updatePathProperty(viewModel.assist.growingTree(), path, "isExpanded", true);
-        viewModel.assist.fetchHivePath();
+        viewModel.assist.fetchAuthorizablesPath();
       }
 
-      $("#path").jHueHiveAutocomplete({
+      $("#path").jHueGenericAutocomplete({
         skipColumns: true,
+        serverType: viewModel.component().toUpperCase(),
         home: viewModel.assist.path(),
         onPathChange: function (path) {
           setPathFromAutocomplete(path);
@@ -705,7 +747,7 @@ ${ tree.import_templates(itemClick='$root.assist.setPath', iconClick='$root.assi
       });
 
       $("#createRoleModal").on("hidden", function () {
-        $('#jHueHiveAutocomplete').hide();
+        $('#jHueGenericAutocomplete').hide();
         viewModel.resetCreateRole();
       });
 

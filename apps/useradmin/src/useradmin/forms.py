@@ -23,10 +23,11 @@ from django import forms
 from django.contrib.auth.models import User, Group
 from django.forms import ValidationError
 from django.forms.util import ErrorList
-from django.utils.translation import ugettext as _, ugettext_lazy as _t
+from django.utils.translation import get_language, ugettext as _, ugettext_lazy as _t
 
 from desktop import conf as desktop_conf
 from desktop.lib.django_util import get_username_re_rule, get_groupname_re_rule
+from desktop.settings import LANGUAGES
 
 from useradmin.models import GroupPermission, HuePermission
 from useradmin.models import get_default_user_group
@@ -81,6 +82,9 @@ class UserChangeForm(django.contrib.auth.forms.UserChangeForm):
   This is similar, but not quite the same as djagno.contrib.auth.forms.UserChangeForm
   and UserCreationForm.
   """
+
+  GENERIC_VALIDATION_ERROR = _("Username or password is invalid.")
+
   username = forms.RegexField(
       label=_t("Username"),
       max_length=30,
@@ -88,7 +92,7 @@ class UserChangeForm(django.contrib.auth.forms.UserChangeForm):
       help_text = _t("Required. 30 characters or fewer. No whitespaces or colons."),
       error_messages = {'invalid': _t("Whitespaces and ':' not allowed") })
 
-  password1 = forms.CharField(label=_t("Password"),
+  password1 = forms.CharField(label=_t("New Password"),
                               widget=forms.
                               PasswordInput,
                               required=False,
@@ -97,16 +101,21 @@ class UserChangeForm(django.contrib.auth.forms.UserChangeForm):
                               widget=forms.PasswordInput,
                               required=False,
                               validators=get_password_validators())
-  password_old = forms.CharField(label=_t("Previous Password"), widget=forms.PasswordInput, required=False)
+  password_old = forms.CharField(label=_t("Current password"), widget=forms.PasswordInput, required=False)
   ensure_home_directory = forms.BooleanField(label=_t("Create home directory"),
                                             help_text=_t("Create home directory if one doesn't already exist."),
                                             initial=True,
                                             required=False)
+  language = forms.ChoiceField(label=_t("Language Preference"),
+                               choices=LANGUAGES,
+                               required=False)
 
   class Meta(django.contrib.auth.forms.UserChangeForm.Meta):
     fields = ["username", "first_name", "last_name", "email", "ensure_home_directory"]
 
   def __init__(self, *args, **kwargs):
+
+
     super(UserChangeForm, self).__init__(*args, **kwargs)
 
     if self.instance.id:
@@ -125,6 +134,17 @@ class UserChangeForm(django.contrib.auth.forms.UserChangeForm):
         self.fields['is_superuser'].widget.attrs['readonly'] = True
       if 'groups' in self.fields:
         self.fields['groups'].widget.attrs['readonly'] = True
+
+  def clean_username(self):
+    username = self.cleaned_data["username"]
+    if self.instance.username == username:
+      return username
+
+    try:
+      User._default_manager.get(username=username)
+    except User.DoesNotExist:
+      return username
+    raise forms.ValidationError(self.GENERIC_VALIDATION_ERROR, code='duplicate_username')
 
   def clean_password(self):
     return self.cleaned_data["password"]
@@ -147,7 +167,7 @@ class UserChangeForm(django.contrib.auth.forms.UserChangeForm):
       password1 = self.cleaned_data.get("password1", "")
       password_old = self.cleaned_data.get("password_old", "")
       if password1 != '' and not self.instance.check_password(password_old):
-        raise forms.ValidationError(_("The old password does not match the current password."))
+        raise forms.ValidationError(self.GENERIC_VALIDATION_ERROR)
     return self.cleaned_data.get("password_old", "")
 
   def save(self, commit=True):

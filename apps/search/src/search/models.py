@@ -283,32 +283,7 @@ class Collection(models.Model):
       props['collection']['enabled'] = True
     if 'leafletmap' not in props['collection']['template']:
       props['collection']['template']['leafletmap'] = {'latitudeField': None, 'longitudeField': None, 'labelField': None}
-    if 'showGrid' not in props['collection']['template']:
-      props['collection']['template']['showGrid'] = True
-    if 'showChart' not in props['collection']['template']:
-      props['collection']['template']['showChart'] = False
-    if 'chartSettings' not in props['collection']['template']:
-      props['collection']['template']['chartSettings'] = {}
-    if 'chartType' not in props['collection']['template']['chartSettings']:
-      props['collection']['template']['chartSettings']['chartType'] = 'bars'
-    if 'chartSorting' not in props['collection']['template']['chartSettings']:
-      props['collection']['template']['chartSettings']['chartSorting'] = 'none'
-    if 'chartScatterGroup' not in props['collection']['template']['chartSettings']:
-      props['collection']['template']['chartSettings']['chartScatterGroup'] = None
-    if 'chartScatterSize' not in props['collection']['template']['chartSettings']:
-      props['collection']['template']['chartSettings']['chartScatterSize'] = None
-    if 'chartScope' not in props['collection']['template']['chartSettings']:
-      props['collection']['template']['chartSettings']['chartScope'] = 'world'
-    if 'chartX' not in props['collection']['template']['chartSettings']:
-      props['collection']['template']['chartSettings']['chartX'] = None
-    if 'chartYSingle' not in props['collection']['template']['chartSettings']:
-      props['collection']['template']['chartSettings']['chartYSingle'] = None
-    if 'chartYMulti' not in props['collection']['template']['chartSettings']:
-      props['collection']['template']['chartSettings']['chartYMulti'] = []
-    if 'chartData' not in props['collection']['template']['chartSettings']:
-      props['collection']['template']['chartSettings']['chartData'] = []
-    if 'chartMapLabel' not in props['collection']['template']['chartSettings']:
-      props['collection']['template']['chartSettings']['chartMapLabel'] = None
+
     for facet in props['collection']['facets']:
       properties = facet['properties']
       if 'gap' in properties and not 'initial_gap' in properties:
@@ -356,20 +331,6 @@ class Collection(models.Model):
       </div>""" % ' '.join(['{{%s}}' % field['name'] for field in fields]),
       "isGridLayout": True,
       "showFieldList": True,
-      "showGrid": True,
-      "showChart": False,
-      "chartSettings": {
-        'chartType': 'bars',
-        'chartSorting': 'none',
-        'chartScatterGroup': None,
-        'chartScatterSize': None,
-        'chartScope': 'world',
-        'chartX': None,
-        'chartYSingle': None,
-        'chartYMulti': [],
-        'chartData': [],
-        'chartMapLabel': None,
-      },
       "fieldsAttributes": [self._make_gridlayout_header_field(field) for field in fields],
       "fieldsSelected": [],
       "leafletmap": {'latitudeField': None, 'longitudeField': None, 'labelField': None},
@@ -395,7 +356,6 @@ class Collection(models.Model):
 
   @classmethod
   def _make_gridlayout_header_field(cls, field, isDynamic=False):
-    print field
     return {'name': field['name'], 'sort': {'direction': None}, 'isDynamic': isDynamic}
 
   def get_absolute_url(self):
@@ -422,32 +382,6 @@ class Collection(models.Model):
     if 'collection' in properties_python:
       if 'showFieldList' not in properties_python['collection']['template']:
         properties_python['collection']['template']['showFieldList'] = True
-      if 'showGrid' not in properties_python['collection']['template']:
-        properties_python['collection']['template']['showGrid'] = True
-      if 'showChart' not in properties_python['collection']['template']:
-        properties_python['collection']['template']['showChart'] = False
-      if 'chartSettings' not in properties_python['collection']['template']:
-        properties_python['collection']['template']['chartSettings'] = {}
-      if 'chartType' not in properties_python['collection']['template']['chartSettings']:
-        properties_python['collection']['template']['chartSettings']['chartType'] = 'bars'
-      if 'chartSorting' not in properties_python['collection']['template']['chartSettings']:
-        properties_python['collection']['template']['chartSettings']['chartSorting'] = 'none'
-      if 'chartScatterGroup' not in properties_python['collection']['template']['chartSettings']:
-        properties_python['collection']['template']['chartSettings']['chartScatterGroup'] = None
-      if 'chartScatterSize' not in properties_python['collection']['template']['chartSettings']:
-        properties_python['collection']['template']['chartSettings']['chartScatterSize'] = None
-      if 'chartScope' not in properties_python['collection']['template']['chartSettings']:
-        properties_python['collection']['template']['chartSettings']['chartScope'] = 'world'
-      if 'chartX' not in properties_python['collection']['template']['chartSettings']:
-        properties_python['collection']['template']['chartSettings']['chartX'] = None
-      if 'chartYSingle' not in properties_python['collection']['template']['chartSettings']:
-        properties_python['collection']['template']['chartSettings']['chartYSingle'] = None
-      if 'chartYMulti' not in properties_python['collection']['template']['chartSettings']:
-        properties_python['collection']['template']['chartSettings']['chartYMulti'] = []
-      if 'chartData' not in properties_python['collection']['template']['chartSettings']:
-        properties_python['collection']['template']['chartSettings']['chartData'] = []
-      if 'chartMapLabel' not in properties_python['collection']['template']['chartSettings']:
-        properties_python['collection']['template']['chartSettings']['chartMapLabel'] = None
 
     return properties_python
 
@@ -540,27 +474,18 @@ class Collection2(object):
     if 'showChart' not in props['collection']['template']:
       props['collection']['template']['showChart'] = False
     if 'chartSettings' not in props['collection']['template']:
-      props['collection']['template']['chartSettings'] = {}
-    if 'chartType' not in props['collection']['template']['chartSettings']:
-      props['collection']['template']['chartSettings']['chartType'] = 'bars'
-    if 'chartSorting' not in props['collection']['template']['chartSettings']:
-      props['collection']['template']['chartSettings']['chartSorting'] = 'none'
-    if 'chartScatterGroup' not in props['collection']['template']['chartSettings']:
-      props['collection']['template']['chartSettings']['chartScatterGroup'] = None
-    if 'chartScatterSize' not in props['collection']['template']['chartSettings']:
-      props['collection']['template']['chartSettings']['chartScatterSize'] = None
-    if 'chartScope' not in props['collection']['template']['chartSettings']:
-      props['collection']['template']['chartSettings']['chartScope'] = 'world'
-    if 'chartX' not in props['collection']['template']['chartSettings']:
-      props['collection']['template']['chartSettings']['chartX'] = None
-    if 'chartYSingle' not in props['collection']['template']['chartSettings']:
-      props['collection']['template']['chartSettings']['chartYSingle'] = None
-    if 'chartYMulti' not in props['collection']['template']['chartSettings']:
-      props['collection']['template']['chartSettings']['chartYMulti'] = []
-    if 'chartData' not in props['collection']['template']['chartSettings']:
-      props['collection']['template']['chartSettings']['chartData'] = []
-    if 'chartMapLabel' not in props['collection']['template']['chartSettings']:
-      props['collection']['template']['chartSettings']['chartMapLabel'] = None
+      props['collection']['template']['chartSettings'] = {
+        'chartType': 'bars',
+        'chartSorting': 'none',
+        'chartScatterGroup': None,
+        'chartScatterSize': None,
+        'chartScope': 'world',
+        'chartX': None,
+        'chartYSingle': None,
+        'chartYMulti': [],
+        'chartData': [],
+        'chartMapLabel': None,
+      }
     if 'enabled' not in props['collection']:
       props['collection']['enabled'] = True
     if 'leafletmap' not in props['collection']['template']:
@@ -670,6 +595,19 @@ class Collection2(object):
   def _make_gridlayout_header_field(cls, field, isDynamic=False):
     return {'name': field['name'], 'type': field['type'], 'sort': {'direction': None}, 'isDynamic': isDynamic}
 
+
+  @classmethod
+  def _make_luke_from_schema_fields(cls, schema_fields):
+    return dict([
+          (f['name'], {
+              'copySources': [],
+              'type': f['type'],
+              'required': True,
+              'uniqueKey': f.get('uniqueKey'),
+              'flags': u'%s-%s-----OF-----l' % ('I' if f['indexed'] else '-', 'S' if f['stored'] else '-'), u'copyDests': []
+          })
+        for f in schema_fields['fields']])
+
   def get_absolute_url(self):
     return reverse('search:index') + '?collection=%s' % self.id
 
@@ -677,8 +615,14 @@ class Collection2(object):
     return sorted([str(field.get('name', '')) for field in self.fields_data(user)])
 
   def fields_data(self, user, name):
-    schema_fields = SolrApi(SOLR_URL.get(), user).fields(name)
-    schema_fields = schema_fields['schema']['fields']
+    api = SolrApi(SOLR_URL.get(), user)
+    try:
+      schema_fields = api.fields(name)
+      schema_fields = schema_fields['schema']['fields']
+    except Exception, e:
+      LOG.warn('/luke call did not succeed: %s' % e)
+      fields = api.schema_fields(name)
+      schema_fields = Collection2._make_luke_from_schema_fields(fields)
 
     return sorted([self._make_field(field, attributes) for field, attributes in schema_fields.iteritems()])
 
