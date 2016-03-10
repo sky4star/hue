@@ -55,7 +55,6 @@ ${ layout.menubar(section='query') }
                   activeSourceType: snippetType,
                   navigationSettings: {
                     openItem: false,
-                    showPreview: true,
                     showStats: true
                   }
                 },
@@ -267,14 +266,18 @@ ${ layout.menubar(section='query') }
                data-original-title="${ _('Query name') }"
                data-placement="right">
             </a>
-            <a href="javascript:void(0);"
-               id="query-description"
-               data-type="textarea"
-               data-name="description"
-               data-value="${design.desc}"
-               data-original-title="${ _('Query description') }"
-               data-placement="right" style="font-size: 14px; margin-left: 10px">
-            </a>
+            <br />
+            <div style="display: inline-block; margin: 0 10px 0 46px; line-height: 20px; ">
+              <a href="javascript:void(0);"
+                 id="query-description"
+                 data-type="textarea"
+                 data-name="description"
+                 data-value="${design.desc}"
+                 data-original-title="${ _('Query description') }"
+                 data-placement="bottom"
+                 style="font-size: 14px; line-height: 20px; white-space: normal; " >
+              </a>
+            </div>
           </h1>
           %endif
       </div>
@@ -1212,7 +1215,7 @@ $(document).ready(function () {
 
   function draggableHelper(el, e, ui) {
     resizeCodeMirror(el);
-    var minHandlePosition = $('.card-heading.simple').is(':visible') ? 248 : 205;
+    var minHandlePosition = $('.card-heading.simple').is(':visible') ? $('.card-heading.simple').outerHeight() + 205 : 205;
     if (ui.position.top < minHandlePosition) {
       ui.position.top = minHandlePosition;
     }
@@ -1673,7 +1676,7 @@ $(document).ready(function () {
         CURRENT_CODEMIRROR_SIZE = 270;
         if ($('.card-heading.simple').is(':visible')) {
           INITIAL_CODEMIRROR_SIZE = 270;
-          INITIAL_HORIZONTAL_RESIZE_POSITION = 418;
+          INITIAL_HORIZONTAL_RESIZE_POSITION = $('.card-heading.simple').outerHeight() + 374;
         }
         codeMirror.setSize("99%", CURRENT_CODEMIRROR_SIZE);
         reinitializeTableExtenders();
